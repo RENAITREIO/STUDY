@@ -2,51 +2,48 @@
 #include <string.h>
 
 
-// deck_t * hand_from_string(const char * str, future_cards_t * fc) {
-//     deck_t *res = malloc(sizeof(deck_t));
-//     res->cards = NULL;
-//     res->n_cards = 0;
-//     for (int i = 0; i < strlen(str); i+=3){
-//         char value_let = str[i];
-//         char suit_let = str[i + 1];
-//         if (value_let != '?') {
-//             card_t tmp = card_from_letters(value_let, suit_let);
-//             add_card_to(res, tmp);
-//         }
-//         else {
-//             size_t index = str[i + 1] - '0';
-//             card_t *ptr = add_empty_card(res);
-//             add_future_card(fc,index,ptr);
-//         }
-//     }
-//     return res;
-// }
 deck_t * hand_from_string(const char * str, future_cards_t * fc) {
-	if (strlen(str) < 15){
-		fprintf(stderr, "Not enough cards in hand");
-		exit(EXIT_FAILURE);
-	}
-	deck_t *hand = malloc(sizeof(deck_t));
-	hand->cards = NULL;
-	hand->n_cards = 0;
+    deck_t *res = malloc(sizeof(deck_t));
+    res->cards = NULL;
+    res->n_cards = 0;
+
+	// Bad designed code 😭
+    // for (size_t i = 0; i < strlen(str); i+=3){
+    //     char value_let = str[i];
+    //     char suit_let = str[i + 1];
+    //     if (value_let != '?' && value_let != '\n') {
+    //         card_t tmp = card_from_letters(value_let, suit_let);
+    //         add_card_to(res, tmp);
+    //     }
+    //     else {
+    //         size_t index = atoi(&str[i + 1]);
+    //         card_t *ptr = add_empty_card(res);
+    //         add_future_card(fc,index,ptr);
+	// 		while (i + 2 < strlen(str) && str[i + 2] != ' ')
+	// 		{
+	// 			i++;
+	// 		}
+    //     }
+    // }
+
 	for (size_t i = 0; i < strlen(str); i++) {
-		if (str[i] == '\n'  || str[i] == '\0' || str[i] == ' ') { 
+		if (str[i] == '\n' || str[i] == ' ') { 
 			continue;
-		} else if (str[i] == '?') {
-			card_t *ptr = add_empty_card(hand);
+		}
+		else if (str[i] == '?') {
+			card_t *ptr = add_empty_card(res);
 			int index = atoi(&str[i+1]);
 			add_future_card(fc, index, ptr);
-			if (index > 9)  // Weird math to fix ?10
-				i += 2;
-			else 
+			while (i < strlen(str) && str[i] != ' ')
 				i++;
-		} else {
+		}
+		else {
 			card_t card = card_from_letters(str[i], str[i+1]);
-			add_card_to(hand, card);
+			add_card_to(res, card);
 			i++;
 		}
 	}
-	return hand;
+    return res;
 }
 
 deck_t ** read_input(FILE * f, size_t * n_hands, future_cards_t * fc) {
