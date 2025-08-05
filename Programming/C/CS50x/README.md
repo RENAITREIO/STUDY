@@ -1,1 +1,0 @@
-Problem sets about the part of C and Python in CS50x.
