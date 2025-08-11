@@ -1,0 +1,26 @@
+Put your answers to the debugging questions from Problem One in this file.
+
+Q1:
+numDisks: 5
+start: 'A'
+finish: 'C'
+temp: 'B'
+
+Q2:
+file: TowersOfHanoiGUI.cpp
+function: makeTheMagicHappen
+
+Q3:
+31
+
+Q4:
+15
+
+Q5:
+2-character input
+
+Q6:
+chosen += ch
+
+Q7:
+after performing chosen += ch, the change cannot be undone.
