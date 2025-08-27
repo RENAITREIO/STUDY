@@ -1,6 +1,6 @@
-<div style="text-align: center; font-size: 40px; font-weight:bold;">
+<h1 style="text-align: center; font-weight:bold;">
     Notes
-</div>
+</h1>
 
 <br/>
 
