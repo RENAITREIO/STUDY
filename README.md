@@ -7,6 +7,6 @@ TODO:
 - [x] Introductory C Programming Specialization
 - [x] CS106B
 - [ ] CS106L
-- [ ] CS61A
+- [x] CS61A
 - [ ] CS61B
 - [ ] CMU CS15213
