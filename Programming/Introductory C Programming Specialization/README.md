@@ -1,4 +1,4 @@
-<h1 style="text-align: center; font-weight:bold;">
+<h1>
     Notes
 </h1>
 
