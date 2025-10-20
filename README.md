@@ -9,5 +9,5 @@ TODO:
 - [ ] CS106L
 - [x] CS61A
 - [ ] CS61B
-- [ ] CMU CS15213
+- [ ] CMU CS15-213
 - [ ] CS110L...?
