@@ -38,9 +38,21 @@ default method identify how hypernym should behave(can be override)
 dynamic type depend on what in box  
 > When Java runs a method that is overriden, it searches for the appropriate method signature in it's dynamic type and runs it.
 
-> Every class in Java is a descendant of the Object class.  
-`.equals(Object obj)`, `.hashCode()`, and `toString()`
-
+> Every class in Java is a descendant of the Object class.
+```
+// Object Class
+String toString()
+boolean equals(Object obj)
+Class <?> getClass()
+int hashCode()
+protected Objectclone()
+protected void finalize()
+void notify()
+void notifyAll()
+void wait()
+void wait(long timeout)
+void wait(long timeout, int nanos)
+```
 type checking and casting  
 highter-order functions  
 Subtype Polymorphism  
@@ -64,6 +76,50 @@ An immutable data type is a data type whose instances cannot change in any obser
 > The K extends Comparable\<K> means keys must implement the comparable interface and can be compared to other K's.
 
 ## Exceptions, Iterators, Iterables, Object Methods
+throw exceptions is better  
+enhanced for loop: Iterator\<T>(Object), Iterable\<T>(Interface)
+
+## Packages and access control
+file name -> package name
+### access control
+<img src="notepictures/access_modifiers.png">
+
+## Efficient Programming
+### Asymptotics
+Big-Omega <= Big-theta <= Big-O  
+dynamic array amortized the time
+
+## Disjoint Sets
+- quick find
+- quick union
+- weighted quick union(WQU)
+- WQU with path compression
+
+## ADTs
+common use:
+- Stacks
+- Lists
+- Sets
+- Maps
+- Tree
+
+## Tree
+binary search tree(can use to implement set and map)  
+B-tree  
+Red-Black tree  
+
+
+
+
+## Hashing
+
+
+
+## Heap and Priority Queue
+
+
+
+## Trie
 
 
 
@@ -73,14 +129,7 @@ An immutable data type is a data type whose instances cannot change in any obser
 
 
 
-
-
-
-
-
-
-
-
+## Tree tranversals and graphs
 ### tree traversals
 - pre-order traversal  
 use: for printing directary listing
@@ -114,9 +163,10 @@ graph representations
 breadth-first search  
 implement with queue
 
+## Algorithm
+### BFS DFS
 ### Dijkstra's algorithm
 construct a shortest-path tree
-
 ### A* algorithm
 `d(initial, v) + h(v, goal)`  
 need to choose good heuristics
@@ -141,7 +191,6 @@ while lowest rank in OPEN is not the GOAL:
 reconstruct reverse path from goal to start
 by following parent pointers
 ```
-
 ## minimum spanning trees
 Cycle Property and Cut Property  
 Prim's algorithm(use cut property)  
