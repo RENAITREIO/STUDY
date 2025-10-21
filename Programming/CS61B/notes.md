@@ -1,5 +1,86 @@
 # CS61B notes
 
+## Introduction to Java
+### Essentials
+.java -> `javac(compiler)` -> .class - > `java(interpreter)` -> stuff happens  
+all variables and expressions have a `static type`
+### Objects
+static vs. non-static  
+array of objects  
+class methods vs. instance methods  
+static variables should be accessed using the name of the class
+
+## Lists
+the golden rule of equals(GRoE)  
+primitive types: `byte`, `short`, `int`, `long`, `float`, `double`, `boolean`, `char`  
+others: reference type
+- IntList
+- SLList(NestedClasses: IntNode)
+- DLList
+- ArrayList(dynamic size)
+
+## Testing
+test method/class  
+Junit  
+Test-Driven Development  
+Integrating Testing
+
+## Inheritance, Implements
+`implement` interface class  
+`extends` all instance variables, static variables, all methods, all nested classes
+> Note that constructors are not inherited, and private members cannot be directly accessed by subclasses.
+
+Hypernyms Hyponyms  
+is-a relationship  
+overloading  
+@Override  
+default method identify how hypernym should behave(can be override)  
+dynamic type depend on what in box  
+> When Java runs a method that is overriden, it searches for the appropriate method signature in it's dynamic type and runs it.
+
+> Every class in Java is a descendant of the Object class.  
+`.equals(Object obj)`, `.hashCode()`, and `toString()`
+
+type checking and casting  
+highter-order functions  
+Subtype Polymorphism  
+Comparable\<T>/Comparator\<T>
+### Java libraries
+- List
+- Set
+- Map
+
+`abstract` classes: cannot be instantiated(seems like interface + class)
+### Package
+appending the class to a website address (backwards)
+
+## Generics and Autoboxing
+ArrayList\<int>(×)  
+ArrayList\<Integer>(√)  
+Arrays are never autoboxes or auto-unboxed  
+Similar to the autoboxing/unboxing process, Java will also automatically widen a primitive if needed.  
+An immutable data type is a data type whose instances cannot change in any observable way after instantiation.  
+`final` can prevent variables being changed after its first assignment  
+> The K extends Comparable\<K> means keys must implement the comparable interface and can be compared to other K's.
+
+## Exceptions, Iterators, Iterables, Object Methods
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### tree traversals
 - pre-order traversal  
 use: for printing directary listing
@@ -101,5 +182,7 @@ log(N!) = N log N
 
 
 ## Reflection
+- cache can reduce time
 - sentinel may be useful
 - set with comparator is better than list with sort
+- all the subclass also need to be serialized
