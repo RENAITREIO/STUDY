@@ -97,50 +97,46 @@ dynamic array amortized the time
 
 ## ADTs
 common use:
-- Stacks
-- Lists
-- Sets
-- Maps
-- Tree
+  - Stacks
+  - Lists
+  - Sets
+  - Maps
+  - Tree
 
 ## Tree
 binary search tree(can use to implement set and map)  
-B-tree  
+B-tree(2-3-4/2-3 Trees)  
+Tree Rotation  
 Red-Black tree  
-
-
-
+Properties of LLRB's:
+  - 1-1 correspondence with 2-3 trees.
+  - No node has 2 red links.
+  - There are no red right-links.
+  - Every path from root to leaf has same number of black links (because 2-3 trees have same number of links to every leaf).
+  - Height is no more than 2x height of corresponding 2-3 tree.
 
 ## Hashing
-
-
+`.hashCode()`  
+Two objects that are considered `.equal()` must have the same hash code.  
+hashing collision  
+Dynamically growing the hash table
 
 ## Heap and Priority Queue
+use dynamic array
 
-
-
-## Trie
-
-
-
-
-
-
-
-
+## Tries
+a digit-by-digit set representation  
+the hash-table based trie  
+the BST-based trie
 
 ## Tree tranversals and graphs
 ### tree traversals
 - pre-order traversal  
-use: for printing directary listing
-
+  use: for printing directary listing
 - in-order traversal
-
 - post-order traversal  
-use: for gathering file sizes
-
+  use: for gathering file sizes
 - level order(BFS)
-
 ### graph
 simple graph  
 no "length 1 loops"  
@@ -191,6 +187,7 @@ while lowest rank in OPEN is not the GOAL:
 reconstruct reverse path from goal to start
 by following parent pointers
 ```
+
 ## minimum spanning trees
 Cycle Property and Cut Property  
 Prim's algorithm(use cut property)  
@@ -200,11 +197,6 @@ directed acyclic graphs
 topological sort  
 DAG shortest paths(can find path with negative edges)  
 DAG longest paths: flip all the weights and use shortest path algorithm
-
-### Tries
-a digit-by-digit set representation  
-the hash-table based trie  
-the BST-based trie  
 
 ## Sorting
 - selection sort
@@ -217,16 +209,10 @@ Hoare partitioning(a partition algorithm make quicksort faster)
 - sleep sort
 - counting sort
 - radix sort(LSD, MSD)
-
 ### theoretical bounds
 comparison sorts: heapsort, mergesort, quicksort, insertion sort, selection sort, bubble sort  
 non-comparison sorts: radix sort, sleepsort, gravity sort, BOGOsort  
 log(N!) = N log N
-
-
-
-
-
 
 
 
