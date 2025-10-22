@@ -1,5 +1,6 @@
 # CS61B notes
 
+
 ## Introduction to Java
 ### Essentials
 .java -> `javac(compiler)` -> .class - > `java(interpreter)` -> stuff happens  
@@ -10,6 +11,7 @@ array of objects
 class methods vs. instance methods  
 static variables should be accessed using the name of the class
 
+
 ## Lists
 the golden rule of equals(GRoE)  
 primitive types: `byte`, `short`, `int`, `long`, `float`, `double`, `boolean`, `char`  
@@ -19,11 +21,13 @@ others: reference type
 - DLList
 - ArrayList(dynamic size)
 
+
 ## Testing
 test method/class  
 Junit  
 Test-Driven Development  
 Integrating Testing
+
 
 ## Inheritance, Implements
 `implement` interface class  
@@ -66,6 +70,7 @@ Comparable\<T>/Comparator\<T>
 ### Package
 appending the class to a website address (backwards)
 
+
 ## Generics and Autoboxing
 ArrayList\<int>(×)  
 ArrayList\<Integer>(√)  
@@ -75,25 +80,30 @@ An immutable data type is a data type whose instances cannot change in any obser
 `final` can prevent variables being changed after its first assignment  
 > The K extends Comparable\<K> means keys must implement the comparable interface and can be compared to other K's.
 
+
 ## Exceptions, Iterators, Iterables, Object Methods
 throw exceptions is better  
 enhanced for loop: Iterator\<T>(Object), Iterable\<T>(Interface)
+
 
 ## Packages and access control
 file name -> package name
 ### access control
 <img src="notepictures/access_modifiers.png">
 
+
 ## Efficient Programming
 ### Asymptotics
 Big-Omega <= Big-theta <= Big-O  
 dynamic array amortized the time
+
 
 ## Disjoint Sets
 - quick find
 - quick union
 - weighted quick union(WQU)
 - WQU with path compression
+
 
 ## ADTs
 common use:
@@ -102,6 +112,7 @@ common use:
   - Sets
   - Maps
   - Tree
+
 
 ## Tree
 binary search tree(can use to implement set and map)  
@@ -115,25 +126,36 @@ Properties of LLRB's:
   - Every path from root to leaf has same number of black links (because 2-3 trees have same number of links to every leaf).
   - Height is no more than 2x height of corresponding 2-3 tree.
 
+
 ## Hashing
 `.hashCode()`  
 Two objects that are considered `.equal()` must have the same hash code.  
 hashing collision  
 Dynamically growing the hash table
 
+
 ## Heap and Priority Queue
 use dynamic array
+
 
 ## Tries
 a digit-by-digit set representation  
 the hash-table based trie  
 the BST-based trie
 
+
 ## QuadTrees
 X-Based Tree or Y-Based Tree -> QuadTree(4-way division)  
 Quad-Trees are great for 2-D spaces.  
 Octree(for 3D data)  
-K-D Trees
+### K-D Trees
+> No matter how high the dimensions get, a K-D tree will always be a binary tree, since each level is partitioned into "greater" and "less than".
+
+Nearest Neighbor
+  - Start at the root and store that point as the "best so far". Compute its distance to the query point, and save that as the "score to beat". In the image above, we start at A whose distance to the flagged point is 4.5.
+  - This node partitions the space around it into two subspaces. For each subspace, ask: "Can a better point be possibly found inside of this space?" This question can be answered by computing the shortest distance between the query point and the edge of our subspace (see dotted purple line below).
+  - Continue recursively for each subspace identified as containing a possibly better point.
+  - In the end, our "best so far" is the best point; the point closest to the query point.
 
 
 ## Tree tranversals and graphs
@@ -166,6 +188,7 @@ graph representations
 breadth-first search  
 implement with queue
 
+
 ## Algorithm
 ### BFS DFS
 ### Dijkstra's algorithm
@@ -195,6 +218,7 @@ reconstruct reverse path from goal to start
 by following parent pointers
 ```
 
+
 ## minimum spanning trees
 Cycle Property and Cut Property  
 Prim's algorithm(use cut property)  
@@ -204,6 +228,7 @@ directed acyclic graphs
 topological sort  
 DAG shortest paths(can find path with negative edges)  
 DAG longest paths: flip all the weights and use shortest path algorithm
+
 
 ## Sorting
 - selection sort
