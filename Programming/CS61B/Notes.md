@@ -129,6 +129,13 @@ a digit-by-digit set representation
 the hash-table based trie  
 the BST-based trie
 
+## QuadTrees
+X-Based Tree or Y-Based Tree -> QuadTree(4-way division)  
+Quad-Trees are great for 2-D spaces.  
+Octree(for 3D data)  
+K-D Trees
+
+
 ## Tree tranversals and graphs
 ### tree traversals
 - pre-order traversal  
