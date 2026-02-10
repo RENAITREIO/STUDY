@@ -1,0 +1,15 @@
+Grading at Thu 24 Jul 2025 01:38:42 AM UTC
+Attempting to compile breaker.c 
+gcc -std=gnu99 -pedantic -Wall -O3 breaker.c -o breaker
+testcase1 passed
+#################################################
+testcase2:
+testcase2 passed
+#################################################
+testcase3:
+testcase3 passed
+#################################################
+testcase4:
+testcase4 passed
+
+Overall Grade: A

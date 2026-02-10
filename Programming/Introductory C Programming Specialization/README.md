@@ -1,1 +1,0 @@
-## Introductory C Programming Specialization
