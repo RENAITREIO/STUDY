@@ -411,7 +411,7 @@ slow start
 - MIAD
 - MIMD
 
-sender’s window is computed as the minimum of CWND and RWND
+sender's window is computed as the minimum of CWND and RWND
 
 
 
