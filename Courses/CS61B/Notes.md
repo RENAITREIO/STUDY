@@ -43,7 +43,7 @@ dynamic type depend on what in box
 > When Java runs a method that is overriden, it searches for the appropriate method signature in it's dynamic type and runs it.
 
 > Every class in Java is a descendant of the Object class.
-```
+```java
 // Object Class
 String toString()
 boolean equals(Object obj)

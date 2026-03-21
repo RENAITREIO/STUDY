@@ -15,7 +15,7 @@ TMin=$-2^{w-1}$, TMax=$2^{w-1}-1$
 observations: $|TMin|=TMax+1, UMax=2TMax+1$  
 
 signed and unsigned evaluation: signed value implictly cast to unsigned
-```
+```c
 // print -128
 char a = -128;
 a=-a;
@@ -31,7 +31,7 @@ for unsigned: `u >> k` gives ⌊u / $2^k$⌋
 for minus signed: ⌊u / $2^k$⌋ gives `u >> k` if u % 2 == 0, else `(u + 1) >> k`  
 signed x, -x = ~x + 1  
 data type `size_t` defined as unsigned value with length = word size
-```
+```c
 size_t i;
 for (i = cnt - 2; i < cnt; i--)
     a[i] += a[i + 1];
@@ -542,7 +542,7 @@ golobal ip internet based on TCP/IP protacol family
 - TCP(Transmission Control Protocol)
 
 IP address struct
-```
+```c
 struct in_addr {
     uint32_t s_addr;
 };
@@ -565,14 +565,14 @@ socket pair: (cliaddr:cliport, servaddr:servport)
 
 socket address structure
 - generic socket address
-    ```
+    ```c
     struct sockaddr {
         uint16_t sa_family;
         char sa_data[14];
     };
     ```
 - Internet-specific socket address
-    ```
+    ```c
     struct sockaddr_in {
         uint16_t sin_family;
         uint16_t sin_port;
@@ -583,7 +583,7 @@ socket address structure
 
 ![sockets interface](./pic/socket.png)
 
-```
+```c
 int getaddrinfo(const char *host, const char *service, const struct addrinfo *hints, struct addrinfo **result);
 
 void freeaddrinfo(struct addrinfo *result);
@@ -592,7 +592,7 @@ const char *gai_strerror(int errcode);
 ```
 
 addrinfo struct
-```
+```c
 struct addrinfo {
     int ai_flags;
     int ai_family;
@@ -605,7 +605,7 @@ struct addrinfo {
 };
 ```
 
-```
+```c
 int getnameinfo(const SA *sa, socklen_t salen, char *host, size_t hostlen, char *serv, size_t servlen, int flags);
 ```
 
@@ -672,7 +672,7 @@ critical sections and unsafe regions
 semaphore: non-negative global integer synchronization variable  
 manipulated by P and V operations  
 semaphore invariant: s >= 0
-```
+```c
 int sem_init(sem_t *s, 0, unsigned int val); /* s = val */
 
 int sem_wait(sem_t *s); /* P(s) */
