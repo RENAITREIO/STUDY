@@ -110,7 +110,7 @@ network graph is constantly changing
 routing protocols is distributed
 
 - intra-domain routing protocols(interior gateway protocols(IGPs))
-- inter-domain routing protocols(exterior gateway protocols(EGPs))
+- inter-domain routing protocols(exterior gateway protocols(EGPs))  
     the Internet use BGP
 
 in pratice, the lines between intra and inter are blurred
@@ -378,6 +378,8 @@ individual ack
 full information ack  
 cumulative ack
 
+data → segment/datagram → packet → frame → bit
+
 TCP segment  
 MSS(TCP segment limit) = MTU(IP packet limit) - IP header size - TCP header size
 
@@ -396,24 +398,41 @@ such as SYN-ACK
 TCP header
 
 ### Congestion Control
-- reservations
-- pricing
-- dynamic adjustment
-  - host-based
-    - loss-based
-    - delay-based
-  - router-assisted
+congestion control algorithm need learn about the bandwidths and bottenedes along the path, need to be adaptive to changes in network topologycongestion control algorithm
 
-slow start
+goals: efficient, fair, scalable and decentralized
 
+dynamic adjustment
+- host-based
+  - loss-based
+  - delay-based
+- router-assisted
+
+host-based algorithm
+```
+sending at a rate R for some period of time
+if experience congestion
+    reduce R
+else
+    increase R
+```
+
+detecting congestion
+- check for packet loss (commonly used by TCP)  
+  but bad in corruption and arrive late
+- check packet delay
+
+discovering initial rate
 - AIAD
 - AIMD(best)
 - MIAD
 - MIMD
 
-sender's window is computed as the minimum of CWND and RWND
+recipient sends RWND (receiver window)  
+sender maintains CWND (congestion window)  
+so window = $\min\{RWND, CWND\}$
 
-
+window size = rate × RTT
 
 
 
