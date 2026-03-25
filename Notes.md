@@ -430,11 +430,22 @@ discovering initial rate
 
 recipient sends RWND (receiver window)  
 sender maintains CWND (congestion window)  
-so window = $\min\{RWND, CWND\}$
+so window = min\{RWND, CWND\}
 
 window size = rate × RTT
 
+event-driven updates  
+- new ack: increase window size  
+- 3 duplicate acks: decrease window size  
+- timeout: back to slow-start phase(TCP)
 
+event-driven slow start  
+choose a slow rate and increase exponentially  
+once receiving ack, increase window size  
+save SSTHRESH(slow start threshold)
+
+additive increaseing  
+receive ack -> CWND = CWND + 1/CWND
 
 
 
