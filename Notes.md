@@ -11,11 +11,11 @@ internet design challenges
 - fault tolerance
 
 protocol
-- syntex
+- syntax
 - semantics
 
 layer 1 - physical(moving bits across space)  
-need some phisical technology
+need some physical technology
 
 layer 2 - link(local networks)  
 links between machines  
@@ -113,7 +113,7 @@ routing protocols is distributed
 - inter-domain routing protocols(exterior gateway protocols(EGPs))  
     the Internet use BGP
 
-in pratice, the lines between intra and inter are blurred
+in practice, the lines between intra and inter are blurred
 
 destination-based forwarding  
 depend on the destination field of the packet  
@@ -123,7 +123,7 @@ forwarding(deliver packets) vs. routing(fill tables)
 
 a global routing state is valid if and only if there are no dead ends and no loops
 
-directd delivery tree  
+directed delivery tree  
 oriented spanning tree
 
 least-cost routing
@@ -173,7 +173,7 @@ For each destination:
 routing protocol classified by how to operate
 - distance-vector
 - link-state(common as intra-domain)  
-    expamles: IS-IS, OSPF
+    examples: IS-IS, OSPF
 - path-vector
 
 global data and local computation
@@ -231,7 +231,7 @@ components
     use network management system(NMS)
 
 chassis, controller card, linecard  
-each linecard is connecte to the fabric
+each linecard is connected to the fabric
 
 types of packets
 - user packet
@@ -277,7 +277,7 @@ policy-based routing
 gao-redford rules: multiple path, pick the most profitable one  
 properties: single-peaked, reachability, convergence
 
-BGP(border getway protocol)  
+BGP(border gateway protocol)  
 importing  
     customer > provider > peer  
 exporting
@@ -332,13 +332,13 @@ ipv4 header
 3. tell the destination what to do next
 4. send responses back to the source
 5. handle errors
-6. specify any sepcial packet handling
+6. specify any special packet handling
 
 maximum transmission unit(MTU)
 
 ipv6
 1. eliminate checksums
-2. eliminate fragmanetation
+2. eliminate fragmentation
 3. eliminate options, add next header
 4. add flow label
 
