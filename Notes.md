@@ -444,9 +444,54 @@ choose a slow rate and increase exponentially
 once receiving ack, increase window size  
 save SSTHRESH(slow start threshold)
 
-additive increaseing  
+additive increasing  
 receive ack -> CWND = CWND + 1/CWND
 
+multiplicative decrease  
+detect loss from 3 duplicate acks, divide the window size by 2
+
+fast recovery  
+use extend window  
+set SSTHRESH = CWND / 2
+
+TCP congestion control variants
+- TCP Tahoe
+- TCP Reno
+- TCP New Reno
+- TCP-SACK
+
+throughput: $\frac{3}{4} W_{max}\cdot \frac{MSS}{RTT}$  
+loss rate: $p=\frac{8}{3W_{max}^2}$
+
+rate-based congestion control  
+equation-based  
+TCP-friendly
+
+issues
+- confusing corruption and congestion
+- short connections
+- TCP fills up queues: learn minimum RTT(BBR)
+- cheating
+
+router-assisted  
+enforcing fair queuing  
+Explicit Congestion Notification(ECN) in the IP header
+
+## Applications
+### DNS
+Domain Name System  
+name server hierarchy  
+stub resolvers and recursive resolvers  
+redundancy: multiple name servers  
+use UDP  
+
+records in DNS (3-tuple <Name, Class, Type>)
+- A type: map domains to IPv4 addresses
+- AAAA type: map domains to IPv6 addresses
+- NS: map zones to domains
+- CNAME: for aliasing or redirecting
+
+DNS authority hierarchy
 
 
 disc  
