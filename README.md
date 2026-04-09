@@ -13,4 +13,6 @@ TODO:
 - [x] The Missing Semester of Your CS Education
 - [ ] CS106L
 - [ ] CS168
-- [ ] CS143
+- [ ] SJTU 编译原理
+- [ ] CS110L
+- [ ] MIT 6.S081
