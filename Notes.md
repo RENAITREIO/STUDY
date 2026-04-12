@@ -493,8 +493,103 @@ records in DNS (3-tuple <Name, Class, Type>)
 
 DNS authority hierarchy
 
+anycast: many mirrors and use the same IP address for all of them
 
-disc  
-ping, traceroute and dig  
-ip time-to-live(TTL)  
-internet control message protocol(ICMP) (built on top of IP)
+DNS for Email  
+`MX` type records: map domains to mail servers  
+`MX` records contain a priority
+
+DNS for load balancing  
+receive multiple A type records, mapping a single domain to multiple IP addresses  
+PTR type record: map IP address to name
+
+### HTTP (HTTP/1.1)
+runs over TCP  
+- a client-server protocol
+- a request-response protocol
+    
+HTTP: port 80  
+HTTPS: port 443
+
+HTTP requests
+- method
+    - GET
+    - POST
+    - HEAD
+    - PUT
+    - CONNECT
+    - DELETE
+    - OPTIONS
+    - PATCH
+    - TRACE
+- URL
+- version
+- optional content
+
+end with a newline (CRLF)
+    
+with other methods like POST, need a URL to indicate how to interpret
+
+HTTP responses(request corresponds to a response)
+- version
+- status code
+    - 100 informational responses
+    - 200 successful responses
+        - 200 OK
+        - 201 Created
+    - 300 redirection messages
+        - 301 Moved Permanently
+        - 302 Found
+    - 400 an error attributable to client action
+        - 401 Unauthorized
+        - 403 Forbidden
+        - 404 Not Found
+    - 500 an error attributable to server action
+        - 500 Internal Server Error
+        - 503 Service Unavailable
+- optional message
+- content
+
+HTTP Headers  
+additional metadata
+
+speeding up HTTP
+- pipelining
+- caching
+    - private caches
+    - proxy caches
+    - managed caches
+
+Expires header
+Cache-Control header
+
+content delivery networks (CDNs)
+
+HTTPS is an extension to HTTP, and runs on top of TLS (transport layer security)
+
+HTTP/2.0
+
+HTTP/3.0 run over QUIC (quick UDP connections)
+
+## End-to-End
+![layers](pic/layers.png)
+### Ethernet
+bus topology: connect all the computers along a single wire  
+shared media
+
+![multiple access protocols](pic/multiple-access-protocols.png)
+multiple access protocols
+- multiplexing
+    - frequency
+    - time
+- taking turns
+    - polling: a centralized coordinator  
+        Bluetooth
+    - tokens: a virtual token  
+        IBM Token Ring  
+        FDDI
+- random access
+    - ALOHA
+    - CSMA (Carrier Sense Multiple Access)
+    - CSMA/CD (with Collision Detection)
+        use binary exponential backoff
