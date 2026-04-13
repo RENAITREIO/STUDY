@@ -611,3 +611,136 @@ ethernet supports unicast, multicast, and broadcast
 ethernet packet structure
 ![ethernet packet](pic/ethernet-packet.png)
 a data packet in Ethernet is a frame
+
+### STP
+forwarding with flooding: a switch receives a packet and sends it out of every port
+
+learning switches: When you receive an incoming packet, you get a clue about where the sender is. You can use that information to populate the forwarding entry for the sender.
+1. When you receive an incoming packet, update the forwarding table to associate the sender with the incoming port.
+2. If the destination is in your forwarding table, then forward the packet to the correct next-hop. Otherwise, flood the packet out of all ports except the incoming port.
+
+flooding problems: waste bandwidth and overwhelm the network(broadcast storm)
+
+STP(Spanning Tree Protocol)
+each switch is assigned an ID  
+root switch: the switch with the lowest ID
+
+switch port states
+- designated port
+- root port
+- blocked port
+
+To remove loops, each switch simply needs to pretend like its blocked ports don’t exist.
+
+BPDUs(Bridge Protocol Data Units): to track root
+1. The root in the BPDU has a lower ID. This means that you have discovered a better root. You should abandon your current root and cost, and instead adopt the new root and the path to the new root.
+2. The root in the BPDU is the same, but the BPDU is offering a better path to the root. You should adopt the new path to the root.
+
+### ARP(Address Resolution Protocol)
+translate an IPv4 address into its MAC address
+
+ARP runs directly on Layer 2
+
+Neighbor Discovery: translate IPv6 addresses to MAC addresses
+
+### DHCP(Dynamic Host Configuration Protocol)
+a computer joins the network, need to know:
+- IP address
+- subnet mask
+- default gateway
+- DNS recursive resolver
+
+DHCP four steps
+1. The new client broadcasts a Discover message, asking for configuration information.
+2. Any DHCP server who can help will unicast an Offer to the client, with a configuration that the client can use (e.g. IP address, gateway address, DNS address).
+3. The client will broadcast a Request message, indicating which offer they accepted. This message is broadcast because the client might get multiple offers. By telling everybody which offer it’s accepting, the client allows the rejected offers to be freed up for future clients.
+4. The server sends an acknowledgement to confirm that the request was granted.
+
+in small networks like home network, the home router acts as the DHCP server  
+in larger networks, there could be a separate machine as the DHCP server
+
+DHCP servers listen on UDP port 67
+
+note that IP addresses are temporarily to hosts
+
+DHCP is a Layer 7 application protocol
+
+client sends a packet with destination IP of 255.255.255.255, which is the IPv4 broadcast address. when this packet is passed down to Layer 2, the IPv4 broadcast address is mapped to the Ethernet broadcast address of FF:FF:FF:FF:FF:FF. so the packet can get broadcast across the network at Layer 2
+
+DHCP in IPv6: SLAAC(Stateless Sddress Autoconfiguration)  
+copy the MAC address to Host ID
+
+### NAT(Network Address Translation)
+motivation: IPv4 address exhaustion
+
+PAT(Port Address Translation)(wide-used)  
+the router is keeping track of connection using the 5-tuple of `source IP`, `destination IP`, `protocol`, `source port`, and `destination port`.  
+if the ports is same, router will rewrite the port to a different fake port
+
+one-to-one address translation
+
+NAT increases the complexity, it is performed as close to the edge of the network as possible
+
+ISP network itself also run a more complex version of NAT called CGNAT(Carrier Grade NAT)
+
+note that we generally don't use NAT for IPv6
+
+inbound connections
+
+security implications
+- NAT has the property that it doesn’t allow inbound connections by default. This could be viewed as a security feature.
+- it can help preserve client privacy.
+
+### TLS(Transport Layer Security)
+run over TCP
+
+TLS can be thought of as a Layer 4.5 protocol, and TLS relies on the bytestream abstraction of TCP
+
+the difference of HTTPS and HTTP is that HTTPS runs over the secure bytestream of TLS-over-TCP
+
+TLS handshake
+1. The client and server exchange hellos. The hellos contain random numbers, which ensures that every handshake results in different secret keys. The hellos also allow the client and server to agree on specific cryptographic protocols to use. The client’s hello lists all cryptographic schemes the client supports, and the server’s hello picks one to use.
+2. The server sends a certificate of authenticity. This will allow the client to verify that it’s talking to the real server, and not an impersonator.
+3. The client and server derive a secret that only the two of them know. Since the bytestream is still insecure at this point, they’ll need a cryptographic protocol that enables sharing a secret over an insecure channel. The client encrypts a secret with the server’s public key and sends it to the server. Only the server knows the corresponding private key and is able to decrypt the message and learn the secret.
+4. The client and server derive secret keys based on the shared secret and the random values from the hellos. Using the secret ensures that attackers can’t learn the secret keys. Using the random values ensures that we derive a different key every time. This derivation is done locally and independently by both the client and server.
+5. The client and server exchange some acknowledgements to confirm that they derived the same secrets, and nobody tampered with the messages sent over the network so far.
+
+### End-to-End Connectivity
+> In this section, we’ll do a step-by-step walkthrough of what happens when we turn on our computer, plug it into an Ethernet network, and type www.berkeley.edu in our web browser. 
+1. DHCP
+2. find router at layer 2
+3. DNS lookup
+4. connect to website
+
+sockets: give programmers a convenient way to interact with the network
+
+layers 3 and 4 are implemented in the networking stack int the OS
+
+## Datacenters
+Connections that go outside the network are described as north-south traffic. Connections between machines inside the network are described as east-west traffic.
+
+bisection bandwidth
+
+oversubscription
+
+two class of connection
+- Most connections are mice, which are short and latency-sensitive.
+- some connections are elephants, which are large and throughput-sensitive.
+
+## Beyond Client-Server
+multicast
+![multicast implementation](pic/multicast.png)
+
+IP multicast  
+don't always enable  
+3 operations
+- You can send packets to a group
+- You can announce that you are joining a group.
+- You can announce that you are leaving a group.
+
+IGMP(Internet Group Management Protocol): how do routers know what groups their directly-connected hosts belong to?  
+some types of messages
+- queries
+- reports
+
+DVMRP and CBT: How do routers forward packets through the network to reach the destination group members?
