@@ -14,6 +14,8 @@ protocol
 - syntax
 - semantics
 
+![1-7 layers](pic/1-7-layers.png)
+
 layer 1 - physical(moving bits across space)  
 need some physical technology
 
@@ -217,6 +219,8 @@ multi-homing
 longest prefix matching
 
 IPv4 and IPv6 addresses
+![ipv4 header](pic/ipv4-header.png)
+![ipv6 header](pic/ipv6-header.png)
 
 ### Routers
 colocation facilities
@@ -591,5 +595,19 @@ multiple access protocols
 - random access
     - ALOHA
     - CSMA (Carrier Sense Multiple Access)
-    - CSMA/CD (with Collision Detection)
+    - CSMA/CD (with Collision Detection)  
         use binary exponential backoff
+
+ALOHNet: use asymmetric setup
+
+LAN communication
+
+MAC(Media Access Control) addresses (48 bits)  
+the next 22 bits identify the manufacturer, then the last 24 bits identify the specific machine within that manufacturer’s address space  
+hard-coded on the device
+
+ethernet supports unicast, multicast, and broadcast
+
+ethernet packet structure
+![ethernet packet](pic/ethernet-packet.png)
+a data packet in Ethernet is a frame
