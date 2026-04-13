@@ -606,7 +606,10 @@ MAC(Media Access Control) addresses (48 bits)
 the next 22 bits identify the manufacturer, then the last 24 bits identify the specific machine within that manufacturer’s address space  
 hard-coded on the device
 
-ethernet supports unicast, multicast, and broadcast
+communication
+- unicast: set a specific machine's MAC address
+- multicast: set the address of the group
+- broadcast: set the specific address `FF:FF:FF:FF:FF:FF`
 
 ethernet packet structure
 ![ethernet packet](pic/ethernet-packet.png)
