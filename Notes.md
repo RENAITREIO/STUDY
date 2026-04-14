@@ -748,4 +748,72 @@ DVMRP or CBT
 DVMRP  
 naive way is flooding, but wasting bandwidth.(sending the same data along multiple paths and sending the packet to non-members)  
 RPB(Reverse Path Broadcasting)  
-use distance-vector routing to building a spanning tree(reverse all the arrows)
+use distance-vector routing to building a spanning tree(reverse all the arrows)  
+RPM(Reverse Path Multicasting): learning your parent and children  
+When you receive a packet, use the unicast forwarding table to check if the packet is from your parent. If the packet is from your parent, use the new multicast forwarding table (containing advertisements from your children) to forward it to your children.  
+pruning the tree by cutting of any branches where there are no group members
+
+CBT(Core-Based Trees)  
+each destination group has its own tree
+
+efficiency analysis  
+DVMRP ensures that packets would be forwarded along the least-cose paths to all group members  
+CBT trades scalability for efficiency
+
+> If you have one source sending data to a large group, then DVMRP might be the better solution, since it will ensure that all this data travels along optimal paths through the network. Lots of data is being sent (to lots of group members), so using optimal paths results in significant bandwidth savings. Also, if the group is large (e.g. includes almost everyone on the network), then DVMRP’s occasional flooding may not be a big problem.
+> if you have a small group whose members are scattered across a large network, then CBT might be the better solution. CBT will avoid flooding packets to non-members, which would waste a lot of bandwidth.
+
+DVMRP is sometimes named PIM-DM (Protocol Independent Multicast - Dense Mode), which reflects the fact that DVMRP is good for large groups. CBT is sometimes called PIM-SM (Protocol Independent Multicast - Sparse Mode), which reflects the fact that CBT is good for smaller groups.
+
+IP multicast like IGMP, DVMRP and CBT can be used for intra-domain multicast routing, but they cannot easily be extended for inter-domain multicast routing  
+IP multicast is mostly used today within a single domain, and not across different domains.
+
+#### overlay multicast
+build a virtual network topology that directly connects the hosts to each other
+
+From a network architecture standpoint, the end hosts (at Layer 7) are now responsible for running multicast protocols. The end hosts are now acting as virtual routers.
+
+peer-to-peer service
+
+Many overlay networks can co-exist at the same time, over the same underlay network.
+
+Benefits of Overlay Multicast
+- From the perspective of the underlay routers, the overlay network is just another application sending and receiving unicast packets. The underlay routers and protocols don’t need any modifications.
+- Each overlay multicast application can use its own implementation or protocol, so there’s no need for standardization between different applications.
+- Access control is also easier in overlay multicast.
+- Each application can also decide its own business model.
+
+The performance of an overlay network is highly dependent on the virtual topology that you draw between end hosts.
+
+Drawbacks of Overlay Multicast
+- Overlay multicast introduces additional overhead, which affects performance.
+- Overlay multicast is not built into the Internet, which means that application developers must implement overlay multicast themselves.
+
+### collective operations
+AI training -> distributed computing
+1. Split the task up into sub-tasks. Each node runs a sub-task.
+2. After every node finishes their sub-task, everyone exchanges a large amount of state.
+3. Proceed to the next task, and repeat steps 1-2 for the next task.
+
+distributed training infrastructure
+
+collective communication: A group of nodes that exchange data in a coordinated manner as part of a group computation.
+
+features of collective communication
+- Highly structured communication
+- Dedicated network infrastructure
+- Data is transformed as it’s exchanged
+
+7 basic collective operations
+- **Broadcast**: Take the entire vector in a specified root node, and send a copy of that entire vector to every node.
+- **Scatter**: Take the entire vector in a specified root node. Send the ith element of this vector to the ith node.
+- **Gather**: Build a new vector, where the ith element is defined as the ith element from the ith node. Send this vector to a specified root node.
+- **AllGather**: Build a new vector, where the ith element is defined as the ith element from the ith node. Send a copy of this new vector to every node.
+- **Reduce**: Compute the element-wise sum of all the vectors, and send the resulting sum vector to a specified root node.
+- **AllReduce**: Compute the element-wise sum of all the vectors, and send a copy of the resulting sum vector to all nodes.
+- **ReduceScatter**: Compute the element-wise sum of all the vectors. Send the ith element of the sum vector to the ith node.
+
+implementation  
+(TODO)
+
+## Wireless
