@@ -567,13 +567,13 @@ speeding up HTTP
 Expires header
 Cache-Control header
 
-content delivery networks (CDNs)
+Content Delivery Networks(CDNs)
 
-HTTPS is an extension to HTTP, and runs on top of TLS (transport layer security)
+HTTPS is an extension to HTTP, and runs on top of TLS (Transport Layer Security)
 
 HTTP/2.0
 
-HTTP/3.0 run over QUIC (quick UDP connections)
+HTTP/3.0 run over QUIC(Quick UDP Connections)
 
 ## End-to-End
 ![layers](pic/layers.png)
@@ -651,9 +651,9 @@ a computer joins the network, need to know:
 - IP address
 - subnet mask
 - default gateway
-- DNS recursive resolver
+- DNS recursive resolver(maybe)
 
-DHCP four steps
+four steps in DHCP
 1. The new client broadcasts a Discover message, asking for configuration information.
 2. Any DHCP server who can help will unicast an Offer to the client, with a configuration that the client can use (e.g. IP address, gateway address, DNS address).
 3. The client will broadcast a Request message, indicating which offer they accepted. This message is broadcast because the client might get multiple offers. By telling everybody which offer it’s accepting, the client allows the rejected offers to be freed up for future clients.
@@ -671,7 +671,7 @@ DHCP is a Layer 7 application protocol
 client sends a packet with destination IP of 255.255.255.255, which is the IPv4 broadcast address. when this packet is passed down to Layer 2, the IPv4 broadcast address is mapped to the Ethernet broadcast address of FF:FF:FF:FF:FF:FF. so the packet can get broadcast across the network at Layer 2
 
 DHCP in IPv6: SLAAC(Stateless Sddress Autoconfiguration)  
-copy the MAC address to Host ID
+copy the MAC address to Host ID(least 64 bits)
 
 ### NAT(Network Address Translation)
 motivation: IPv4 address exhaustion
@@ -686,7 +686,7 @@ NAT increases the complexity, it is performed as close to the edge of the networ
 
 ISP network itself also run a more complex version of NAT called CGNAT(Carrier Grade NAT)
 
-note that we generally don't use NAT for IPv6
+note that we generally don't use NAT for IPv6(because IPv6 addresses are enough)
 
 inbound connections
 
@@ -720,30 +720,32 @@ sockets: give programmers a convenient way to interact with the network
 layers 3 and 4 are implemented in the networking stack int the OS
 
 ## Datacenters
-Connections that go outside the network are described as north-south traffic. Connections between machines inside the network are described as east-west traffic.
-
-bisection bandwidth
-
-oversubscription
-
-two class of connection
-- Most connections are mice, which are short and latency-sensitive.
-- some connections are elephants, which are large and throughput-sensitive.
+(TODO)
 
 ## Beyond Client-Server
-multicast
+### multicast
+Send a packet to all members in a group. Hosts can choose to join/leave groups at any time. Note that you can send a packet to a group, even if you yourself are not a member of that group.
 ![multicast implementation](pic/multicast.png)
 
-IP multicast  
+#### IP multicast  
 don't always enable  
+
+model:  
 3 operations
 - You can send packets to a group
 - You can announce that you are joining a group.
 - You can announce that you are leaving a group.
 
-IGMP(Internet Group Management Protocol): how do routers know what groups their directly-connected hosts belong to?  
-some types of messages
-- queries
-- reports
+How do routers know what groups their directly-connected hosts belong to?  
+IGMP(Internet Group Management Protocol):  
+exchange messages
+- **Queries**: The router periodically sends Queries to the hosts. These messages ask: What group(s) do you belong to?
+- **Reports**: In response, hosts send Reports back to the router. Reports answer the question: These are the group(s) I belong to. Hosts can also send unsolicited Reports.
 
-DVMRP and CBT: How do routers forward packets through the network to reach the destination group members?
+How do routers forward packets through the network to reach the destination group members?  
+DVMRP or CBT
+
+DVMRP  
+naive way is flooding, but wasting bandwidth.(sending the same data along multiple paths and sending the packet to non-members)  
+RPB(Reverse Path Broadcasting)  
+use distance-vector routing to building a spanning tree(reverse all the arrows)
