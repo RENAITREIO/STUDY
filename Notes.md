@@ -817,3 +817,55 @@ implementation
 (TODO)
 
 ## Wireless
+differences between wired and wireless communications
+- Wireless is a fundamentally shared medium. Wired is not.  
+SINR(Signal to Interference and Noise Ratio)  
+$\text{SINR}=\frac{P_{signal}}{P_{interference}+P_{noise}}$  
+$\text{SINR}_{dB}=10\cdot \text{log}_{10}(\frac{P_{signal}}{P_{interference}+P_{noise}})$  
+Shannon capacity: $C=B\cdot \text{log}_2(1+\text{SINR})$
+- Wireless signals get weaker over longer distances. Wired signals do not.  
+free space model: $P_r\propto \frac{P_t}{d^2}$  
+Friis equation: $P_r=P_t\cdot G_t\cdot G_r\cdot (\frac{\lambda}{4\pi d})^2$
+- Wireless environments can change rapidly. Wired environments do not.  
+The devices can move around. The environment could change. Other communications could start interfering with our communication.
+    - free-space path loss
+    - shadowing
+    - multipath fading  
+- Packet collisions are much harder to detect in wireless systems.  
+CSMA(Carrier Sense Multiple Access)  
+hidden terminal problem  
+exposed terminal problem  
+MSCA(Multiple Access with Collision Avoidance)
+    - A transmits a Request To Send (RTS) packet with the length of the data.
+    - B transmits a Clear To Send (CTS) packet with the length of the data.
+    - A transmits the data, and B receives the data.
+
+MACAW(Multiple Access Collision Avoidance for Wireless)
+- Reliability  
+have an extra step at the end, where the receiver transmits an ack
+- Fairness  
+share the same CW  
+DS packet
+
+Cellular
+![mobile wireless access](pic/cellular-taxonomy.png)
+
+can think of a cellular network as a specialized Layer 2 local network
+
+operation
+- Registration. The user registers for the cellular service.
+- Discovery. The user turns on their phone in the middle of nowhere. Their phone must discover which nearby towers are available, and must also pick a tower to use.
+- Attachment. After picking a tower, the user’s device tells the tower that it wants to connect. The tower must ask the mobility manager if the connection is allowed
+- Data exchange. The user can now send and receive data along the path configured.
+- Handover. As the user moves around, they might move away from their original tower, and closer to a new tower. The old tower, new tower, and the user’s device all work together to decide if the user should switch towers.
+
+IMSI(International Mobile Subscriber Idnetity)
+![imsi](pic/imsi.png)
+
+IMEI(International Mobile Equipment Identity)
+
+phone number
+
+lawful intercept
+
+allow changing IP addresses, like QUIC
