@@ -11,8 +11,10 @@ TODO:
 - [x] EE120
 - [x] CS15-213
 - [x] The Missing Semester of Your CS Education
+- [x] CS168
 - [ ] CS106L
-- [ ] CS168
 - [ ] SJTU 编译原理
 - [ ] CS110L
 - [ ] MIT 6.S081
+- [ ] CS70
+- [ ] CS61C

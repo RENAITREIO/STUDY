@@ -1,0 +1,871 @@
+# CS168 Notes
+
+## Intro
+### Layers of the Internet
+internet design challenges
+- fedoration
+- scale
+- evolution
+- diversity
+- asynchrony
+- fault tolerance
+
+protocol
+- syntax
+- semantics
+
+![1-7 layers](pic/1-7-layers.png)
+
+layer 1 - physical(moving bits across space)  
+need some physical technology
+
+layer 2 - link(local networks)  
+links between machines  
+exchange packets
+
+layer 3 - internet(connecting local networks)  
+the Internet is a network of networks  
+end hosts: machines  
+switches(aka routers): receive packets and forward them toward destination  
+modularity  
+layer 3 offers a best-effort service model  
+not promissing success
+
+layer 4 - transport(reliably deliver packets)  
+thinking about flows(aka connections)
+
+layer 7 - application(implement services)
+
+> The session layer (5) was supposed to assemble different flows into a session (e.g. loading various images and ads to form a webpage), and the presentation layer (6) was supposed to help the user visualize the data. Today, the functionality of these layers is mostly implemented in Layer 7.
+
+headers  
+packet needs some extra metadata  
+packet = headers + payload
+
+multiple headers
+
+end hosts implement all the layers  
+rounters only implement layers 1-3
+
+### Design Principles
+1. decentralized control  
+    alternative: SDN, DSDN
+2. best-effort services model  
+    alternative: introduce "quality-of-service" guarantees
+3. route around trouble
+4. dumb infrastructure(with smart endpoint)  
+    alternative: routers look inside to detect attacks
+5. end-to-end principle
+6. layering  
+    alternative: protocols spanning multiple layers to optimize
+7. federation via narrow-waist interface
+
+the narrow waist: IP(internet protocol) is the only protocol at layer 3
+
+demultiplexing:  
+layer 3: add header field tell what the next layer protocol is  
+layer 4: add a port number  
+private client use randomly-generated port number  
+public server must use a fixed, well-known port number
+
+logical port and physical port
+
+implement layers in the end host  
+layers 1 and 2 are implemented in hardware, on the network interface card(NIC)  
+layers 3 and 4 are implemented in software, in the operating system  
+layer 7 is the applications running in software
+
+end-to-end principle: certain application features(e.g. reliability) must be implemented at the end host for correctness  
+it's not an unbreakable rule
+
+designing resource sharing  
+- static allocation(fixed)
+- statistical multiplexing(dynamic)
+    - circuit switching(reservations)  
+    used in limited settings
+    - packet switching(best-effort)  
+    default
+
+### Links
+properties of a link
+- bandwidth  
+    measured in bits per second(bps)
+- propagation delay  
+    measured in seconds
+- bandwidth-delay product: bandwidth x delay  
+    "capacity" of the link
+
+overloaded links
+- transient overload  
+    maintain a queue of packets
+- persistent overload
+    drop packets  
+    upgrade router or tell the sender to slow down
+
+packet delay = transmission delay(packet size / bandwidth) + propagation delay + queuing delay
+
+## Routing
+### Principle
+full-mesh topology doesn't scale well, but high bandwidth  
+single-link topology  
+network graph is constantly changing  
+routing protocols is distributed
+
+- intra-domain routing protocols(interior gateway protocols(IGPs))
+- inter-domain routing protocols(exterior gateway protocols(EGPs))  
+    the Internet use BGP
+
+in practice, the lines between intra and inter are blurred
+
+destination-based forwarding  
+depend on the destination field of the packet  
+router keeps a forwarding table
+
+forwarding(deliver packets) vs. routing(fill tables)
+
+a global routing state is valid if and only if there are no dead ends and no loops
+
+directed delivery tree  
+oriented spanning tree
+
+least-cost routing
+
+some table entries can be hard-coded(no routing protocols needed)
+
+static routes
+
+### Distance-Vector
+routing and forwarding are opposite
+
+distance-vector protocol rule
+1. Bellman-Ford updates(distributed and asynchronous)  
+    advertising or announcing in routing
+2. updates from next-hop  
+    topology can change  
+    steady-state occurs when the network has converged
+3. resending
+4. expiring  
+    set TTL
+5. poisoning expired routes  
+    poison: from routes time out or local failure
+6. split horizon or poison reverse
+7. count to infinity
+```
+For each destination:
+
+    - If you hear an advertisement for that destination, update the table and reset the TTL if:
+        The destination isn’t in the table.
+        The advertised cost, plus the link cost to the neighbor, is better than the best-known cost.
+        The advertisement is from the current next-hop. Includes poison advertisements.
+    - Advertise to all your neighbors when the table updates, and periodically (advertisement interval).
+        But don’t advertise back to the next-hop.
+        …Or, advertise poison back to the next-hop.
+        Any cost greater than or equal to 16 is advertised as infinity.
+    - If a table entry expires, make the entry poison and advertise it.
+```
+
+- triggered update
+   - accept new advertisement
+   - a new link added
+   - a link goes down
+   - expire
+- periodically
+
+### Link-State, Addressing
+routing protocol classified by how to operate
+- distance-vector
+- link-state(common as intra-domain)  
+    examples: IS-IS, OSPF
+- path-vector
+
+global data and local computation
+
+ensuring consistency  
+requirements
+1. everyone agrees on the network topology
+2. everyone is minimizing the same cost metric
+3. all costs are positive
+4. all routers use the same tie-breaking rules
+
+learning network graph  
+every router:
+1. discover neighbors
+2. tell everybody about neighbors
+    flood information
+
+avoiding infinite flooding  
+introduce a timestamp
+
+ensuring reliability
+
+ip addressing(at layer 3)  
+hierarchical addressing  
+host in current network(intra-domain) + other networks(inter-domain)  
+*.* wildcard is the default route
+
+assigning addresses  
+early internet -> classful addressing -> CIDR(classless inter-domain routing)  
+network id + host id
+
+multi-layered hierarchical assignment
+
+dotted quad representation  
+slash notation  
+netmask
+
+aggregating routes with CIDR
+
+multi-homing  
+longest prefix matching
+
+IPv4 and IPv6 addresses
+![ipv4 header](pic/ipv4-header.png)
+![ipv6 header](pic/ipv6-header.png)
+
+### Routers
+colocation facilities
+
+line rate  
+capacity = number of ports * line rate of each port
+
+components
+- data plane
+- control plane
+- management plane  
+    use network management system(NMS)
+
+chassis, controller card, linecard  
+each linecard is connected to the fabric
+
+types of packets
+- user packet
+- control plane traffic  
+    example: advertisement
+- punt traffic  
+    example: TTL has expired
+
+linecard functionality: PHY(layer 1) -> MAC(layer 2)
+
+forwarding in hardware  
+forwarding pipeline
+1. receive the packet
+2. process the packet
+3. send the packet onwards
+
+queuing
+- classification
+- buffer management
+- scheduling
+
+efficient forwarding
+
+longest prefix match with tries
+
+### BGP
+autonomous system(AS)
+- stub AS
+- transit AS
+
+inter-domain topology(AS graph)
+
+provider hierarchy
+
+tier 1 ASes
+
+goals of inter-domain routing
+- scalability
+- privacy
+- autonomy
+
+policy-based routing  
+gao-redford rules: multiple path, pick the most profitable one  
+properties: single-peaked, reachability, convergence
+
+BGP(border gateway protocol)  
+importing  
+    customer > provider > peer  
+exporting
+- if receive a router from a customer, export it to everyone
+- if from a peer or provider, only export it to a customer
+
+aggregating prefixes
+
+path-vector: advertise the whole AS path
+
+stub ASes use default routes
+
+border routers and interior routers  
+BGP speaker  
+BGP session
+- external BGP(eBGP) session
+- internal BGP(iBGP) session
+
+egress router
+
+BGP and IGP routing tables
+
+multiple links between ASes  
+-> hot potato routing
+
+multi-exit discriminator(MED)
+
+importing and exporting with tiebreaking policies
+
+hot potato routing and MED are contradictory
+
+BGP message type
+- Open
+- KeepAlive
+- Notification
+- Update
+    - destination prefix
+    - one or more route attributes
+        - ASPATH
+        - LOCAL PREFERENCE
+        - MED
+
+issues of BGP
+- security
+- performance trade-offs
+- complicated and prone to misconfiguration
+- invalid routes
+
+ipv4 header
+1. parse the packet
+2. forward packet to the next hop
+3. tell the destination what to do next
+4. send responses back to the source
+5. handle errors
+6. specify any special packet handling
+
+maximum transmission unit(MTU)
+
+ipv6
+1. eliminate checksums
+2. eliminate fragmentation
+3. eliminate options, add next header
+4. add flow label
+
+ip attack
+- source ip address: spoofing
+- type of service: prioritize attacker traffic
+- fragmentation, options: denial-of-service
+- ttl: traceroute
+- protocol, checksum: no apparent problems
+
+## Transport
+### TCP
+dropped, corrupted, reordered, delayed and duplicated
+
+at-least-once delivery
+
+demultiplexing by introducing port numbers
+
+> Servers usually listen for requests on well-known ports (port numbers 0-1023). Clients can select their own random port numbers (usually port numbers 1024-65535)
+
+TCP and bytestream abstraction  
+UDP and datagrams
+
+round-trip time(RTT)
+
+acknowledgment(ack) and timer  
+negative acknowledgement (nack) and checksum  
+
+window-based algorithms: set a limit W and say that only W packets can be in flight at any given time
+
+Window Size:  
+filling the pipe: W = RTT times bandwidth  
+flow control: advertised window  
+congestion control
+
+individual ack  
+full information ack  
+cumulative ack
+
+data → segment/datagram → packet → frame → bit
+
+TCP segment  
+MSS(TCP segment limit) = MTU(IP packet limit) - IP header size - TCP header size
+
+the ISN is chosen to be random for security reasons
+
+TCP connections are full duplex
+
+three-way handshake  
+- SYN message  
+- SYN-ACK message  
+- ACK message
+
+piggybacking: the recipient could wait until it has some data to send, and then send the ack with the new data.  
+such as SYN-ACK
+
+TCP header
+
+### Congestion Control
+congestion control algorithm need learn about the bandwidths and bottenedes along the path, need to be adaptive to changes in network topologycongestion control algorithm
+
+goals: efficient, fair, scalable and decentralized
+
+dynamic adjustment
+- host-based
+  - loss-based
+  - delay-based
+- router-assisted
+
+host-based algorithm
+```
+sending at a rate R for some period of time
+if experience congestion
+    reduce R
+else
+    increase R
+```
+
+detecting congestion
+- check for packet loss (commonly used by TCP)  
+  but bad in corruption and arrive late
+- check packet delay
+
+discovering initial rate
+- AIAD
+- AIMD(best)
+- MIAD
+- MIMD
+
+recipient sends RWND (receiver window)  
+sender maintains CWND (congestion window)  
+so window = min\{RWND, CWND\}
+
+window size = rate × RTT
+
+event-driven updates  
+- new ack: increase window size  
+- 3 duplicate acks: decrease window size  
+- timeout: back to slow-start phase(TCP)
+
+event-driven slow start  
+choose a slow rate and increase exponentially  
+once receiving ack, increase window size  
+save SSTHRESH(slow start threshold)
+
+additive increasing  
+receive ack -> CWND = CWND + 1/CWND
+
+multiplicative decrease  
+detect loss from 3 duplicate acks, divide the window size by 2
+
+fast recovery  
+use extend window  
+set SSTHRESH = CWND / 2
+
+TCP congestion control variants
+- TCP Tahoe
+- TCP Reno
+- TCP New Reno
+- TCP-SACK
+
+throughput: $\frac{3}{4} W_{max}\cdot \frac{MSS}{RTT}$  
+loss rate: $p=\frac{8}{3W_{max}^2}$
+
+rate-based congestion control  
+equation-based  
+TCP-friendly
+
+issues
+- confusing corruption and congestion
+- short connections
+- TCP fills up queues: learn minimum RTT(BBR)
+- cheating
+
+router-assisted  
+enforcing fair queuing  
+Explicit Congestion Notification(ECN) in the IP header
+
+## Applications
+### DNS
+Domain Name System  
+name server hierarchy  
+stub resolvers and recursive resolvers  
+redundancy: multiple name servers  
+use UDP  
+
+records in DNS (3-tuple <Name, Class, Type>)
+- A type: map domains to IPv4 addresses
+- AAAA type: map domains to IPv6 addresses
+- NS: map zones to domains
+- CNAME: for aliasing or redirecting
+
+DNS authority hierarchy
+
+anycast: many mirrors and use the same IP address for all of them
+
+DNS for Email  
+`MX` type records: map domains to mail servers  
+`MX` records contain a priority
+
+DNS for load balancing  
+receive multiple A type records, mapping a single domain to multiple IP addresses  
+PTR type record: map IP address to name
+
+### HTTP (HTTP/1.1)
+runs over TCP  
+- a client-server protocol
+- a request-response protocol
+    
+HTTP: port 80  
+HTTPS: port 443
+
+HTTP requests
+- method
+    - GET
+    - POST
+    - HEAD
+    - PUT
+    - CONNECT
+    - DELETE
+    - OPTIONS
+    - PATCH
+    - TRACE
+- URL
+- version
+- optional content
+
+end with a newline (CRLF)
+    
+with other methods like POST, need a URL to indicate how to interpret
+
+HTTP responses(request corresponds to a response)
+- version
+- status code
+    - 100 informational responses
+    - 200 successful responses
+        - 200 OK
+        - 201 Created
+    - 300 redirection messages
+        - 301 Moved Permanently
+        - 302 Found
+    - 400 an error attributable to client action
+        - 401 Unauthorized
+        - 403 Forbidden
+        - 404 Not Found
+    - 500 an error attributable to server action
+        - 500 Internal Server Error
+        - 503 Service Unavailable
+- optional message
+- content
+
+HTTP Headers  
+additional metadata
+
+speeding up HTTP
+- pipelining
+- caching
+    - private caches
+    - proxy caches
+    - managed caches
+
+Expires header
+Cache-Control header
+
+Content Delivery Networks(CDNs)
+
+HTTPS is an extension to HTTP, and runs on top of TLS (Transport Layer Security)
+
+HTTP/2.0
+
+HTTP/3.0 run over QUIC(Quick UDP Connections)
+
+## End-to-End
+![layers](pic/layers.png)
+### Ethernet
+bus topology: connect all the computers along a single wire  
+shared media
+
+![multiple access protocols](pic/multiple-access-protocols.png)
+multiple access protocols
+- multiplexing
+    - frequency
+    - time
+- taking turns
+    - polling: a centralized coordinator  
+        Bluetooth
+    - tokens: a virtual token  
+        IBM Token Ring  
+        FDDI
+- random access
+    - ALOHA
+    - CSMA (Carrier Sense Multiple Access)
+    - CSMA/CD (with Collision Detection)  
+        use binary exponential backoff
+
+ALOHNet: use asymmetric setup
+
+LAN communication
+
+MAC(Media Access Control) addresses (48 bits)  
+the next 22 bits identify the manufacturer, then the last 24 bits identify the specific machine within that manufacturer’s address space  
+hard-coded on the device
+
+communication
+- unicast: set a specific machine's MAC address
+- multicast: set the address of the group
+- broadcast: set the specific address `FF:FF:FF:FF:FF:FF`
+
+ethernet packet structure
+![ethernet packet](pic/ethernet-packet.png)
+a data packet in Ethernet is a frame
+
+### STP
+forwarding with flooding: a switch receives a packet and sends it out of every port
+
+learning switches: When you receive an incoming packet, you get a clue about where the sender is. You can use that information to populate the forwarding entry for the sender.
+1. When you receive an incoming packet, update the forwarding table to associate the sender with the incoming port.
+2. If the destination is in your forwarding table, then forward the packet to the correct next-hop. Otherwise, flood the packet out of all ports except the incoming port.
+
+flooding problems: waste bandwidth and overwhelm the network(broadcast storm)
+
+STP(Spanning Tree Protocol)
+each switch is assigned an ID  
+root switch: the switch with the lowest ID
+
+switch port states
+- designated port
+- root port
+- blocked port
+
+To remove loops, each switch simply needs to pretend like its blocked ports don’t exist.
+
+BPDUs(Bridge Protocol Data Units): to track root
+1. The root in the BPDU has a lower ID. This means that you have discovered a better root. You should abandon your current root and cost, and instead adopt the new root and the path to the new root.
+2. The root in the BPDU is the same, but the BPDU is offering a better path to the root. You should adopt the new path to the root.
+
+### ARP(Address Resolution Protocol)
+translate an IPv4 address into its MAC address
+
+ARP runs directly on Layer 2
+
+Neighbor Discovery: translate IPv6 addresses to MAC addresses
+
+### DHCP(Dynamic Host Configuration Protocol)
+a computer joins the network, need to know:
+- IP address
+- subnet mask
+- default gateway
+- DNS recursive resolver(maybe)
+
+four steps in DHCP
+1. The new client broadcasts a Discover message, asking for configuration information.
+2. Any DHCP server who can help will unicast an Offer to the client, with a configuration that the client can use (e.g. IP address, gateway address, DNS address).
+3. The client will broadcast a Request message, indicating which offer they accepted. This message is broadcast because the client might get multiple offers. By telling everybody which offer it’s accepting, the client allows the rejected offers to be freed up for future clients.
+4. The server sends an acknowledgement to confirm that the request was granted.
+
+in small networks like home network, the home router acts as the DHCP server  
+in larger networks, there could be a separate machine as the DHCP server
+
+DHCP servers listen on UDP port 67
+
+note that IP addresses are temporarily to hosts
+
+DHCP is a Layer 7 application protocol
+
+client sends a packet with destination IP of 255.255.255.255, which is the IPv4 broadcast address. when this packet is passed down to Layer 2, the IPv4 broadcast address is mapped to the Ethernet broadcast address of FF:FF:FF:FF:FF:FF. so the packet can get broadcast across the network at Layer 2
+
+DHCP in IPv6: SLAAC(Stateless Sddress Autoconfiguration)  
+copy the MAC address to Host ID(least 64 bits)
+
+### NAT(Network Address Translation)
+motivation: IPv4 address exhaustion
+
+PAT(Port Address Translation)(wide-used)  
+the router is keeping track of connection using the 5-tuple of `source IP`, `destination IP`, `protocol`, `source port`, and `destination port`.  
+if the ports is same, router will rewrite the port to a different fake port
+
+one-to-one address translation
+
+NAT increases the complexity, it is performed as close to the edge of the network as possible
+
+ISP network itself also run a more complex version of NAT called CGNAT(Carrier Grade NAT)
+
+note that we generally don't use NAT for IPv6(because IPv6 addresses are enough)
+
+inbound connections
+
+security implications
+- NAT has the property that it doesn’t allow inbound connections by default. This could be viewed as a security feature.
+- it can help preserve client privacy.
+
+### TLS(Transport Layer Security)
+run over TCP
+
+TLS can be thought of as a Layer 4.5 protocol, and TLS relies on the bytestream abstraction of TCP
+
+the difference of HTTPS and HTTP is that HTTPS runs over the secure bytestream of TLS-over-TCP
+
+TLS handshake
+1. The client and server exchange hellos. The hellos contain random numbers, which ensures that every handshake results in different secret keys. The hellos also allow the client and server to agree on specific cryptographic protocols to use. The client’s hello lists all cryptographic schemes the client supports, and the server’s hello picks one to use.
+2. The server sends a certificate of authenticity. This will allow the client to verify that it’s talking to the real server, and not an impersonator.
+3. The client and server derive a secret that only the two of them know. Since the bytestream is still insecure at this point, they’ll need a cryptographic protocol that enables sharing a secret over an insecure channel. The client encrypts a secret with the server’s public key and sends it to the server. Only the server knows the corresponding private key and is able to decrypt the message and learn the secret.
+4. The client and server derive secret keys based on the shared secret and the random values from the hellos. Using the secret ensures that attackers can’t learn the secret keys. Using the random values ensures that we derive a different key every time. This derivation is done locally and independently by both the client and server.
+5. The client and server exchange some acknowledgements to confirm that they derived the same secrets, and nobody tampered with the messages sent over the network so far.
+
+### End-to-End Connectivity
+> In this section, we’ll do a step-by-step walkthrough of what happens when we turn on our computer, plug it into an Ethernet network, and type www.berkeley.edu in our web browser. 
+1. DHCP
+2. find router at layer 2
+3. DNS lookup
+4. connect to website
+
+sockets: give programmers a convenient way to interact with the network
+
+layers 3 and 4 are implemented in the networking stack int the OS
+
+## Datacenters
+(TODO)
+
+## Beyond Client-Server
+### multicast
+Send a packet to all members in a group. Hosts can choose to join/leave groups at any time. Note that you can send a packet to a group, even if you yourself are not a member of that group.
+![multicast implementation](pic/multicast.png)
+
+#### IP multicast  
+don't always enable  
+
+model:  
+3 operations
+- You can send packets to a group
+- You can announce that you are joining a group.
+- You can announce that you are leaving a group.
+
+How do routers know what groups their directly-connected hosts belong to?  
+IGMP(Internet Group Management Protocol):  
+exchange messages
+- **Queries**: The router periodically sends Queries to the hosts. These messages ask: What group(s) do you belong to?
+- **Reports**: In response, hosts send Reports back to the router. Reports answer the question: These are the group(s) I belong to. Hosts can also send unsolicited Reports.
+
+How do routers forward packets through the network to reach the destination group members?  
+DVMRP or CBT
+
+DVMRP  
+naive way is flooding, but wasting bandwidth.(sending the same data along multiple paths and sending the packet to non-members)  
+RPB(Reverse Path Broadcasting)  
+use distance-vector routing to building a spanning tree(reverse all the arrows)  
+RPM(Reverse Path Multicasting): learning your parent and children  
+When you receive a packet, use the unicast forwarding table to check if the packet is from your parent. If the packet is from your parent, use the new multicast forwarding table (containing advertisements from your children) to forward it to your children.  
+pruning the tree by cutting of any branches where there are no group members
+
+CBT(Core-Based Trees)  
+each destination group has its own tree
+
+efficiency analysis  
+DVMRP ensures that packets would be forwarded along the least-cose paths to all group members  
+CBT trades scalability for efficiency
+
+> If you have one source sending data to a large group, then DVMRP might be the better solution, since it will ensure that all this data travels along optimal paths through the network. Lots of data is being sent (to lots of group members), so using optimal paths results in significant bandwidth savings. Also, if the group is large (e.g. includes almost everyone on the network), then DVMRP’s occasional flooding may not be a big problem.
+> if you have a small group whose members are scattered across a large network, then CBT might be the better solution. CBT will avoid flooding packets to non-members, which would waste a lot of bandwidth.
+
+DVMRP is sometimes named PIM-DM (Protocol Independent Multicast - Dense Mode), which reflects the fact that DVMRP is good for large groups. CBT is sometimes called PIM-SM (Protocol Independent Multicast - Sparse Mode), which reflects the fact that CBT is good for smaller groups.
+
+IP multicast like IGMP, DVMRP and CBT can be used for intra-domain multicast routing, but they cannot easily be extended for inter-domain multicast routing  
+IP multicast is mostly used today within a single domain, and not across different domains.
+
+#### overlay multicast
+build a virtual network topology that directly connects the hosts to each other
+
+From a network architecture standpoint, the end hosts (at Layer 7) are now responsible for running multicast protocols. The end hosts are now acting as virtual routers.
+
+peer-to-peer service
+
+Many overlay networks can co-exist at the same time, over the same underlay network.
+
+Benefits of Overlay Multicast
+- From the perspective of the underlay routers, the overlay network is just another application sending and receiving unicast packets. The underlay routers and protocols don’t need any modifications.
+- Each overlay multicast application can use its own implementation or protocol, so there’s no need for standardization between different applications.
+- Access control is also easier in overlay multicast.
+- Each application can also decide its own business model.
+
+The performance of an overlay network is highly dependent on the virtual topology that you draw between end hosts.
+
+Drawbacks of Overlay Multicast
+- Overlay multicast introduces additional overhead, which affects performance.
+- Overlay multicast is not built into the Internet, which means that application developers must implement overlay multicast themselves.
+
+### collective operations
+AI training -> distributed computing
+1. Split the task up into sub-tasks. Each node runs a sub-task.
+2. After every node finishes their sub-task, everyone exchanges a large amount of state.
+3. Proceed to the next task, and repeat steps 1-2 for the next task.
+
+distributed training infrastructure
+
+collective communication: A group of nodes that exchange data in a coordinated manner as part of a group computation.
+
+features of collective communication
+- Highly structured communication
+- Dedicated network infrastructure
+- Data is transformed as it’s exchanged
+
+7 basic collective operations
+- **Broadcast**: Take the entire vector in a specified root node, and send a copy of that entire vector to every node.
+- **Scatter**: Take the entire vector in a specified root node. Send the ith element of this vector to the ith node.
+- **Gather**: Build a new vector, where the ith element is defined as the ith element from the ith node. Send this vector to a specified root node.
+- **AllGather**: Build a new vector, where the ith element is defined as the ith element from the ith node. Send a copy of this new vector to every node.
+- **Reduce**: Compute the element-wise sum of all the vectors, and send the resulting sum vector to a specified root node.
+- **AllReduce**: Compute the element-wise sum of all the vectors, and send a copy of the resulting sum vector to all nodes.
+- **ReduceScatter**: Compute the element-wise sum of all the vectors. Send the ith element of the sum vector to the ith node.
+
+implementation  
+(TODO)
+
+## Wireless
+differences between wired and wireless communications
+- Wireless is a fundamentally shared medium. Wired is not.  
+SINR(Signal to Interference and Noise Ratio)  
+$\text{SINR}=\frac{P_{signal}}{P_{interference}+P_{noise}}$  
+$\text{SINR}_{dB}=10\cdot \text{log}_{10}(\frac{P_{signal}}{P_{interference}+P_{noise}})$  
+Shannon capacity: $C=B\cdot \text{log}_2(1+\text{SINR})$
+- Wireless signals get weaker over longer distances. Wired signals do not.  
+free space model: $P_r\propto \frac{P_t}{d^2}$  
+Friis equation: $P_r=P_t\cdot G_t\cdot G_r\cdot (\frac{\lambda}{4\pi d})^2$
+- Wireless environments can change rapidly. Wired environments do not.  
+The devices can move around. The environment could change. Other communications could start interfering with our communication.
+    - free-space path loss
+    - shadowing
+    - multipath fading  
+- Packet collisions are much harder to detect in wireless systems.  
+CSMA(Carrier Sense Multiple Access)  
+hidden terminal problem  
+exposed terminal problem  
+MSCA(Multiple Access with Collision Avoidance)
+    - A transmits a Request To Send (RTS) packet with the length of the data.
+    - B transmits a Clear To Send (CTS) packet with the length of the data.
+    - A transmits the data, and B receives the data.
+
+MACAW(Multiple Access Collision Avoidance for Wireless)
+- Reliability  
+have an extra step at the end, where the receiver transmits an ack
+- Fairness  
+share the same CW  
+DS packet
+
+Cellular
+![mobile wireless access](pic/cellular-taxonomy.png)
+
+can think of a cellular network as a specialized Layer 2 local network
+
+operation
+- Registration. The user registers for the cellular service.
+- Discovery. The user turns on their phone in the middle of nowhere. Their phone must discover which nearby towers are available, and must also pick a tower to use.
+- Attachment. After picking a tower, the user’s device tells the tower that it wants to connect. The tower must ask the mobility manager if the connection is allowed
+- Data exchange. The user can now send and receive data along the path configured.
+- Handover. As the user moves around, they might move away from their original tower, and closer to a new tower. The old tower, new tower, and the user’s device all work together to decide if the user should switch towers.
+
+IMSI(International Mobile Subscriber Idnetity)
+![imsi](pic/imsi.png)
+
+IMEI(International Mobile Equipment Identity)
+
+phone number
+
+lawful intercept
+
+allow changing IP addresses, like QUIC
