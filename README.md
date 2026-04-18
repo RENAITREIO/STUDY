@@ -2,19 +2,20 @@
 
 Just a record for study.
 
-TODO:
+Plans:
 - [x] CS50x
 - [x] Introductory C Programming Specialization
-- [x] CS106B
-- [x] CS61A
-- [x] CS61B
-- [x] EE120
-- [x] CS15-213
+- [x] CS 106B
+- [x] CS 61A
+- [x] CS 61B
+- [x] EE 120
+- [x] CMU 15-213
 - [x] The Missing Semester of Your CS Education
-- [x] CS168
-- [ ] CS106L
+- [x] CS 168
+- [ ] CS 106L
 - [ ] SJTU 编译原理
-- [ ] CS110L
+- [ ] CS 110L
 - [ ] MIT 6.S081
-- [ ] CS70
-- [ ] CS61C
+- [ ] CS 70
+- [ ] CS 61C
+- [ ] EECS 151
