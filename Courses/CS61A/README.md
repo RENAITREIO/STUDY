@@ -1,1 +1,1 @@
-# CS61A Fall 2024
+# CS 61A Fall 2024
