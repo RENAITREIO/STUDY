@@ -62,3 +62,17 @@ j Label
 ```
 
 `jal` `jalr`
+
+`sp` is the stack pointer(x2)
+
+![caller vs callee](pic/caller-and-callee.png)
+
+stack starts in 0xbffffff0  
+stack must be aligned on 16-byte boundary  
+RV32 programs(text segment) in low end(0x00010000)  
+static data segment above text for static variables  
+use global pointer`gp` to point to static  
+RV32 `gq` = 0x10000000  
+heap above static
+
+![memory structure](pic/memory.png)
