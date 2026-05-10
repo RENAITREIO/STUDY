@@ -76,3 +76,5 @@ RV32 `gq` = 0x10000000
 heap above static
 
 ![memory structure](pic/memory.png)
+
+![instructions](pic/instructions.png)
