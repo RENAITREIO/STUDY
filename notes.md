@@ -78,3 +78,19 @@ heap above static
 ![memory structure](pic/memory.png)
 
 ![instructions](pic/instructions.png)
+
+6 basic types of instruction formats
+- R-type  
+![R](pic/R.png)
+- I-type  
+![I](pic/I.png)
+- S-type  
+![S](pic/S.png)
+- B-type  
+![B](pic/B.png)
+- U-type  
+![U](pic/U.png)
+- J-type  
+![J](pic/J.png)
+
+ISA support 16-bit compressed instructions
