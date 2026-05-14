@@ -93,4 +93,33 @@ heap above static
 - J-type  
 ![J](pic/J.png)
 
-ISA support 16-bit compressed instructions
+PC-relative addressing
+
+ISA support 16-bit compressed instructions  
+to enable this, RISCV scales the branch offset by 2 bytes
+
+`LUI` writes the upper 20 bits to the destination with the immediate value. it can be used to load a 32-bit constant into a register.
+
+`AUIPC` adds the PC to the immediate value and places result in destination register.
+
+## Compiling, Assembling, Linking, and Loading
+assembler directives
+- `.text`: Subsequent items put in user text segment (machine code)
+- `.data`: Subsequent items put in user data segment (source file data in binary)
+- `.globl sym`: Declares sym global and can be referenced from other files
+- `.string str`: Store the string str in memory and null-terminate it
+- `.word w1…wn`: Store the n 32-bit quantities in successive memory words
+
+```asm
+# pseudo-instruction replacement
+mv t0, t1           addi t0, t1, 0
+neg t0, t1          sub t0, zero, t1
+li t0, imm          addi t0, zero, imm
+li t0, t1           addi t0, zero, t1
+not t0, t1          xor t0, t1, -1
+beqz t0, loop       beq t0, zero, loop
+la t0, str          lui t0, str[31:12]
+                    addi t0, t0, str[11:0] or
+                    auipc t0, str[31:12]
+                    addi t0, t0, str[11:0]
+```
