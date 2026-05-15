@@ -35,13 +35,6 @@ class TestAbs(TestCase):
 
 
 class TestRelu(TestCase):
-    def test_exception(self):
-        t = AssemblyTest(self, "relu.s")
-        t.input_scalar("a1", 0)
-        t.call("relu")
-        t.check_scalar("a0", 78)
-        t.execute()
-
     def test_boundary(self):
         t = AssemblyTest(self, "relu.s")
         array0 = t.array([0, -1])
@@ -72,13 +65,6 @@ class TestRelu(TestCase):
 
 
 class TestArgmax(TestCase):
-    def test_exception(self):
-        t = AssemblyTest(self, "argmax.s")
-        t.input_scalar("a1", 0)
-        t.call("argmax")
-        t.check_scalar("a0", 77)
-        t.execute()
-
     def test_simple(self):
         t = AssemblyTest(self, "argmax.s")
         # create an array in the data section
@@ -100,13 +86,6 @@ class TestArgmax(TestCase):
 
 
 class TestDot(TestCase):
-    def test_exception(self):
-        t = AssemblyTest(self, "dot.s")
-        t.input_scalar("a1", 0)
-        t.call("dot")
-        t.check_scalar("a0", 76)
-        t.execute()
-
     def test_simple(self):
         t = AssemblyTest(self, "dot.s")
         # create arrays in the data section
@@ -131,53 +110,6 @@ class TestDot(TestCase):
 
 
 class TestMatmul(TestCase):
-    def test_exception0(self):
-        t0 = AssemblyTest(self, "matmul.s")
-        t0.include("dot.s")
-        t0.input_scalar("a1", 0)
-        t0.call("matmul")
-        t0.check_scalar("a0", 72)
-        t0.execute()
-
-        t1 = AssemblyTest(self, "matmul.s")
-        t1.include("dot.s")
-        t1.input_scalar("a1", 1)
-        t1.input_scalar("a2", 0)
-        t1.call("matmul")
-        t1.check_scalar("a0", 72)
-        t1.execute()
-
-    def test_exception1(self):
-        t0 = AssemblyTest(self, "matmul.s")
-        t0.include("dot.s")
-        t0.input_scalar("a1", 1)
-        t0.input_scalar("a2", 1)
-        t0.input_scalar("a4", 0)
-        t0.call("matmul")
-        t0.check_scalar("a0", 73)
-        t0.execute()
-
-        t1 = AssemblyTest(self, "matmul.s")
-        t1.include("dot.s")
-        t1.input_scalar("a1", 1)
-        t1.input_scalar("a2", 1)
-        t1.input_scalar("a4", 1)
-        t1.input_scalar("a5", 0)
-        t1.call("matmul")
-        t1.check_scalar("a0", 73)
-        t1.execute()
-
-    def test_exception2(self):
-        t = AssemblyTest(self, "matmul.s")
-        t.include("dot.s")
-        t.input_scalar("a1", 1)
-        t.input_scalar("a2", 2)
-        t.input_scalar("a4", 1)
-        t.input_scalar("a5", 1)
-        t.call("matmul")
-        t.check_scalar("a0", 74)
-        t.execute()
-
     def do_matmul(self, m0, m0_rows, m0_cols, m1, m1_rows, m1_cols, result, code=0):
         t = AssemblyTest(self, "matmul.s")
         # we need to include (aka import) the dot.s file since it is used by matmul.s

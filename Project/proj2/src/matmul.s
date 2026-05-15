@@ -101,13 +101,13 @@ outer_loop_end:
     ret
 
 exp0:
-    li a0, 72
-    ret
+    li a1, 72
+    jal exit2
 
 exp1:
-    li a0, 73
-    ret
+    li a1, 73
+    jal exit2
 
 exp2:
-    li a0, 74
-    ret
+    li a1, 74
+    jal exit2

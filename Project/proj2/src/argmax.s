@@ -41,5 +41,5 @@ loop_end:
     ret
 
 exp:
-    li a0, 77
-    ret
+    li a1, 77
+    jal exit2
