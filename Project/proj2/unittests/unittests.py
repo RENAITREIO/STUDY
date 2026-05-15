@@ -163,8 +163,8 @@ class TestReadMatrix(TestCase):
         cols = t.array([-1])
 
         # load the addresses to the output parameters into the argument registers
-        raise NotImplementedError("TODO")
-        # TODO
+        t.input_array("a1", rows)
+        t.input_array("a2", cols)
 
         # call the read_matrix function
         t.call("read_matrix")
