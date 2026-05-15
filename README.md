@@ -19,3 +19,13 @@ Plans:
 - [ ] CS 70
 - [ ] CS 61C
 - [ ] EECS 151
+
+
+## License
+
+Code in this repository is licensed under the Apache License 2.0. See `LICENSE-CODE`.
+
+Non-code materials, including notes, explanations, diagrams, and documentation,
+are licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+See `LICENSE-DOCS`.
+
