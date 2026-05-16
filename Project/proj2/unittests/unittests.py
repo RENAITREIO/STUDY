@@ -35,6 +35,12 @@ class TestAbs(TestCase):
 
 
 class TestRelu(TestCase):
+    def test_exception(self):
+        t = AssemblyTest(self, "relu.s")
+        t.input_scalar("a1", 0)
+        t.call("relu")
+        t.execute(code=78)
+
     def test_boundary(self):
         t = AssemblyTest(self, "relu.s")
         array0 = t.array([0, -1])
@@ -65,6 +71,12 @@ class TestRelu(TestCase):
 
 
 class TestArgmax(TestCase):
+    def test_exception(self):
+        t = AssemblyTest(self, "argmax.s")
+        t.input_scalar("a1", 0)
+        t.call("argmax")
+        t.execute(code=77)
+
     def test_simple(self):
         t = AssemblyTest(self, "argmax.s")
         # create an array in the data section
@@ -86,6 +98,12 @@ class TestArgmax(TestCase):
 
 
 class TestDot(TestCase):
+    def test_exception(self):
+        t = AssemblyTest(self, "dot.s")
+        t.input_scalar("a1", 0)
+        t.call("dot")
+        t.execute(code=76)
+
     def test_simple(self):
         t = AssemblyTest(self, "dot.s")
         # create arrays in the data section
@@ -110,6 +128,48 @@ class TestDot(TestCase):
 
 
 class TestMatmul(TestCase):
+    def test_exception_m0(self):
+        t0 = AssemblyTest(self, "matmul.s")
+        t0.include("dot.s")
+        t0.input_scalar("a1", 0)
+        t0.call("matmul")
+        t0.execute(code=72)
+
+        t1 = AssemblyTest(self, "matmul.s")
+        t1.include("dot.s")
+        t1.input_scalar("a1", 1)
+        t1.input_scalar("a2", 0)
+        t1.call("matmul")
+        t1.execute(code=72)
+
+    def test_exception_m1(self):
+        t0 = AssemblyTest(self, "matmul.s")
+        t0.include("dot.s")
+        t0.input_scalar("a1", 1)
+        t0.input_scalar("a2", 1)
+        t0.input_scalar("a4", 0)
+        t0.call("matmul")
+        t0.execute(code=73)
+
+        t1 = AssemblyTest(self, "matmul.s")
+        t1.include("dot.s")
+        t1.input_scalar("a1", 1)
+        t1.input_scalar("a2", 1)
+        t1.input_scalar("a4", 1)
+        t1.input_scalar("a5", 0)
+        t1.call("matmul")
+        t1.execute(code=73)
+
+    def test_exception_match(self):
+        t = AssemblyTest(self, "matmul.s")
+        t.include("dot.s")
+        t.input_scalar("a1", 1)
+        t.input_scalar("a2", 2)
+        t.input_scalar("a4", 1)
+        t.input_scalar("a5", 1)
+        t.call("matmul")
+        t.execute(code=74)
+
     def do_matmul(self, m0, m0_rows, m0_cols, m1, m1_rows, m1_cols, result, code=0):
         t = AssemblyTest(self, "matmul.s")
         # we need to include (aka import) the dot.s file since it is used by matmul.s
@@ -170,13 +230,19 @@ class TestReadMatrix(TestCase):
         t.call("read_matrix")
 
         # check the output from the function
-        # TODO
+        t.check_array(rows, [3])
+        t.check_array(cols, [3])
+        t.check_array_pointer("a0", [1, 2, 3, 4, 5, 6, 7, 8, 9])
 
         # generate assembly and run it through venus
         t.execute(fail=fail, code=code)
 
     def test_simple(self):
         self.do_read_matrix()
+        self.do_read_matrix("malloc", 88)
+        self.do_read_matrix("fopen", 90)
+        self.do_read_matrix("fread", 91)
+        self.do_read_matrix("fclose", 92)
 
     @classmethod
     def tearDownClass(cls):
@@ -191,17 +257,23 @@ class TestWriteMatrix(TestCase):
         # load output file name into a0 register
         t.input_write_filename("a0", outfile)
         # load input array and other arguments
-        raise NotImplementedError("TODO")
-        # TODO
+        array = t.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+        t.input_array("a1", array)
+        t.input_scalar("a2", 3)
+        t.input_scalar("a3", 3)
         # call `write_matrix` function
         t.call("write_matrix")
         # generate assembly and run it through venus
         t.execute(fail=fail, code=code)
         # compare the output file against the reference
-        t.check_file_output(outfile, "outputs/test_write_matrix/reference.bin")
+        if code == 0:
+            t.check_file_output(outfile, "outputs/test_write_matrix/reference.bin")
 
     def test_simple(self):
         self.do_write_matrix()
+        self.do_write_matrix("fopen", 93)
+        self.do_write_matrix("fwrite", 94)
+        self.do_write_matrix("fclose", 95)
 
     @classmethod
     def tearDownClass(cls):

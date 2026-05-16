@@ -65,6 +65,7 @@ read_matrix:
     lw s2, 0(t0)
     lw t0, 0(t1)
     mul s2, s2, t0
+    slli, s2, s2, 2
 
     # call malloc
     mv a0, s2
@@ -80,6 +81,12 @@ read_matrix:
     jal fread
     # check fread error
     bne a0, s2, fread_err
+
+    # call fclose
+    mv a0, s1
+    jal fclose
+    # check fclose error
+    bne a0, zero, fclose_err
 
     # restore registers
     mv a0, s3
