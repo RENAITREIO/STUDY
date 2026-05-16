@@ -123,3 +123,7 @@ la t0, str          lui t0, str[31:12]
                     auipc t0, str[31:12]
                     addi t0, t0, str[11:0]
 ```
+
+## Synchronous Digital System
+maximum clock frequency  
+max delay = CLK-to-Q delay + CL delay + setup time
