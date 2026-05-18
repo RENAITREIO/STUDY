@@ -127,3 +127,23 @@ la t0, str          lui t0, str[31:12]
 ## Synchronous Digital System
 maximum clock frequency  
 max delay = CLK-to-Q delay + CL delay + setup time
+
+## Single-Cycle CPU Control
+control and status registers(CSRs) are separate from the register file(x0-x31)  
+not in the base ISA, but almost all RISC-V implementations have them
+
+the `CSRRW` is atomic read and write CSR
+
+![CSR-instructions](pic/csr.png)
+![CSRi-instructions](pic/csri.png)
+
+```asm
+# pseudo-instruction
+csrw csr, rs1 = csrrw x0, csr, rs1
+csrwi csr, uimm = csrrwi x0, csr, uimm
+```
+
+system instructions
+- `ecall`: make requests to OS, such as system calls
+- `ebreak`: used by debuggers to transfer control to the debugger
+- `fence`: sequences memory and I/O accesses as viewed by other threads or co-processors
