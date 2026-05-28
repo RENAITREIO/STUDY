@@ -130,7 +130,8 @@ max delay = CLK-to-Q delay + CL delay + setup time
 
 ## Single-Cycle CPU Control
 control and status registers(CSRs) are separate from the register file(x0-x31)  
-not in the base ISA, but almost all RISC-V implementations have them
+not in the base ISA, but almost all RISC-V implementations have them  
+there can be up to 4096 CSRs
 
 the `CSRRW` is atomic read and write CSR
 
