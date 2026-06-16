@@ -148,3 +148,39 @@ system instructions
 - `ecall`: make requests to OS, such as system calls
 - `ebreak`: used by debuggers to transfer control to the debugger
 - `fence`: sequences memory and I/O accesses as viewed by other threads or co-processors
+
+## Pipelining
+### Performance Measurement
+instruction timing, progamm execution time, throughput, energy per task  
+power is not a good measure, because it is not always related to performance
+
+Iron Law: $\frac{\text{time}}{\text{program}}=\frac{\text{instructions}}{\text{program}}\cdot \frac{\text{cycles}}{\text{instruction}}\cdot \frac{\text{time}}{\text{cycle}}$
+
+$\frac{\text{cycles}}{\text{instruction}}$ is CPI(Cycles Per Instruction)
+
+instructions per program detemined by
+- task
+- algorithm
+- programming language
+- compiler
+- instruction set architecture
+
+CPI detemined by
+- ISA
+- processor implementation
+- complex instructions
+- superscalar processors
+
+time per cycle determined by
+- processor microachitecture
+- technology
+- power budget
+
+### Energy Efficiency
+![energy in CMOS](pic/energy.png)
+
+energy per task: $\frac{\text{energy}}{\text{program}}=\frac{\text{instructions}}{\text{program}}\cdot \frac{\text{energy}}{\text{instruction}}=\frac{\text{instructions}}{\text{program}}\cdot CV^2$
+
+Iron Law: $\text{performance}=\text{power}\cdot \text{energy efficiency}$
+
+### Pipelining
