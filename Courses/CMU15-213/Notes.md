@@ -243,12 +243,14 @@ linker symbols
 - external symbols
 - local symbols(static)
 
+.bss stores static variables that not initialized, and it takes no space in object file but it takes space in memory
+
 program symbols
 - strong: procedures and initialized globals
 - weak: uninitialized globals
 
 linker's symbol rules:
-- multiple strong symbols are not allowd
+- multiple strong symbols are not allowed
 - given a strong symbol and multiple weak symbols, choose the strong symbol
 - if there are multiple weak symbols, pick an arbitrary one(can override this with gcc -fno-common)
 
