@@ -184,3 +184,15 @@ energy per task: $\frac{\text{energy}}{\text{program}}=\frac{\text{instructions}
 Iron Law: $\text{performance}=\text{power}\cdot \text{energy efficiency}$
 
 ### Pipelining
+![stages](pic/stages.png)
+![pipeline](pic/pipeline.png)
+
+control logic:
+![control logic](pic/control-logic.png)
+
+#### Hazards
+1. structural hazard: a required resource is busy  
+   solutions: stall or add more hardware
+2. data hazard: data dependencies between instructions  
+   solutions: stall or forwarding
+3. control hazard: flow of execution depends on previous instruction  
