@@ -13,9 +13,9 @@ Plans:
 - [x] The Missing Semester of Your CS Education
 - [x] CS 168
 - [ ] CS 106L
-- [ ] SJTU 编译原理
+- [ ] NJU 编译原理 + CS 420
 - [ ] CS 110L
-- [ ] MIT 6.S081
+- [ ] NJU OS
 - [ ] CS 70
 - [ ] CS 61C
 - [ ] EECS 151
