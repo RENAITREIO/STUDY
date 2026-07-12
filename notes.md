@@ -10,8 +10,8 @@
 
 ## Number Representation
 ### signed integers
-- sign and magnitude  
-- one's complement  
+- sign and magnitude
+- one's complement
 - two's complement & bias encoding
 
 ## Floating Point
@@ -23,7 +23,7 @@ $(-1)^S\times (1+\text{Significand}\times 2^{\text{Exponent}-\text{bias}})$
 association and rounding
 
 ## RISC-V (RV32)
-32 registers: x0 - x31  
+32 registers: x0 - x31
 x0 always holds value zero
 
 ### instructions
@@ -154,7 +154,7 @@ csrwi csr, uimm = csrrwi x0, csr, uimm
 - instruction timing
 - progamm execution time
 - throughput
-- energy per task  
+- energy per task
 > [!note]
 > power is not a good measure, because it is not always related to performance
 
