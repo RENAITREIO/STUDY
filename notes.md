@@ -51,7 +51,7 @@ jal jalr
 ```
 
 ### calling convention
-a0-a7 for argument registers(x10-x17) for function calls  
+a0-a7 for argument registers(x10-x17) for function calls\
 8 argument registers to pass parameters and 2 return values(a0-a1)
 
 ra: one return address register to return to the point of origin(x1)
@@ -62,12 +62,12 @@ ra: one return address register to return to the point of origin(x1)
 ![caller vs callee](pic/caller-and-callee.png)
 
 ### Memory Management
-stack starts in 0xbffffff0  
-stack must be aligned on 16-byte boundary  
-RV32 programs(text segment) in low end(0x00010000)  
-static data segment above text for static variables  
-use global pointer`gp` to point to static  
-RV32 `gq` = 0x10000000  
+stack starts in 0xbffffff0\
+stack must be aligned on 16-byte boundary\
+RV32 programs(text segment) in low end(0x00010000)\
+static data segment above text for static variables\
+use global pointer`gp` to point to static\
+RV32 `gq` = 0x10000000\
 heap above static
 
 ![memory structure](pic/memory.png)
@@ -75,27 +75,27 @@ heap above static
 ![instructions](pic/instructions.png)
 
 6 basic types of instruction formats
-- R-type  
+- R-type\
 ![R](pic/R.png)
-- I-type  
+- I-type\
 ![I](pic/I.png)
-- S-type  
+- S-type\
 ![S](pic/S.png)
-- B-type  
+- B-type\
 ![B](pic/B.png)
-- U-type  
+- U-type\
 ![U](pic/U.png)
-- J-type  
+- J-type\
 ![J](pic/J.png)
 
 PC-relative addressing
 
 ### compressed instructions
-ISA support 16-bit compressed instructions  
+ISA support 16-bit compressed instructions\
 to enable this, RISCV scales the branch offset by 2 bytes
 
 ### special instructions
-`LUI` writes the upper 20 bits to the destination with the immediate value. it can be used to load a 32-bit constant into a register.  
+`LUI` writes the upper 20 bits to the destination with the immediate value. it can be used to load a 32-bit constant into a register.\
 `AUIPC` adds the PC to the immediate value and places result in destination register.
 
 ## Compiling, Assembling, Linking, and Loading
@@ -124,13 +124,13 @@ j Label
 ```
 
 ## Synchronous Digital System
-maximum clock frequency  
+maximum clock frequency\
 max delay = CLK-to-Q delay + CL delay + setup time
 
 ## Single-Cycle CPU Control
 ### CSRs
-control and status registers(CSRs) are separate from the register file(x0-x31)  
-not in the base ISA, but almost all RISC-V implementations have them  
+control and status registers(CSRs) are separate from the register file(x0-x31)\
+not in the base ISA, but almost all RISC-V implementations have them\
 there can be up to 4096 CSRs
 
 the `CSRRW` is atomic read and write CSR
@@ -208,7 +208,7 @@ $\text{performance}=\text{power}\cdot \text{energy efficiency}$
    - forwarding
    - code scheduling: reorder instructions to avoid data hazards
 
-3. control hazard: flow of execution depends on previous instruction  
+3. control hazard: flow of execution depends on previous instruction\
    for branch:
    - stall for 2 cycles
    - use branch prediction and flush pipeline
@@ -227,3 +227,13 @@ $\text{performance}=\text{power}\cdot \text{energy efficiency}$
 ![superscalar](pic/superscalar.png)
 
 ## Cache
+cache is a copy of a subset of main memory, becase of the SRAM is much faster but expensive than DRAM
+
+### locality
+- temporal locality
+- spatial locality
+
+### cache organization
+- registers <-> memory
+- cache <-> memory
+- memory <-> disk
