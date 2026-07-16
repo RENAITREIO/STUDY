@@ -237,3 +237,109 @@ cache is a copy of a subset of main memory, becase of the SRAM is much faster bu
 - registers <-> memory
 - cache <-> memory
 - memory <-> disk
+
+### cache address
+- tag
+- index
+- offset
+
+### type of cache
+- direct mapped
+- fully associative
+- set associative
+
+### write hit
+- write through
+- write back
+
+### cache miss
+- compulsory miss: first access to a block
+- conflict miss: two blocks mapped to the same set
+- capacity miss: cache is full
+
+### replacement policy
+- LRU
+- FIFO
+- random
+
+### Average Access Time
+T = Hit Time + Miss Penalty × Miss Rate
+
+## OS
+### what OS does
+- OS is the first program to run on a computer
+- find and control hardware
+- provide services to user programs
+- load and run user programs
+- provide isolation between programs
+
+### what OS need from hardware
+- memory translation
+- protection and privilege
+- traps & interrupts
+
+### boot
+1. BIOS: find a storage device and load the first sector
+2. bootloader: load the OS kernel
+3. OS boot: initialize services, drivers, etc.
+4. init: launch an application that waits for input in loop
+
+thread: shared memory\
+process: separate memory
+
+supervisor mode: can using more instructions
+
+syscall: provide a API for user programs
+
+### Interrupts & Exceptions
+interrupt: something external to the running program
+
+exception: something done by the running program
+
+trap: action of servicing interrupt or exception by hardware jump to trap handler code
+
+### multiprogramming
+- switches between processes
+- set timer, jump into process
+- schedule processes
+
+## Virtual Memory
+### memory
+- DRAM: volatile
+- disk
+  - SSD
+  - HDD
+- flash
+
+### memory manager
+- map virtual address to physical address
+- protection
+
+### paging
+page is usually 4KB in many OS\
+page table entries: map virtual page to physical page, stored in memory\
+so, one lw/sw take **two** memory accesses actualy
+
+### page faults
+- is a exception
+- cause by accessing a page that is not in memory
+  - allocate a new page in memory
+  - swap from disk to memory
+
+### page table problems
+> 256 processes, each with 32 bits address, each with 4KB pages, page table takes out 1GiB memory
+
+#### options
+- increase page size
+- hierarchical page table\
+  ![hierarchical page table](pic/hierarchical-page-table.png)
+
+### 32-bit RISC-V
+![RV32 PTE](pic/RV32-PTE.png)
+> [!NOTE]
+> PPN[1] + PPN[0] = 12 bits
+
+### TLB
+Translation Lookaside Buffer
+
+adress translation is expensive, there are four-level page table in the 64-bit CPU, so we need TLB to speed up the translation
