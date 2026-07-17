@@ -343,3 +343,10 @@ so, one lw/sw take **two** memory accesses actualy
 Translation Lookaside Buffer
 
 adress translation is expensive, there are four-level page table in the 64-bit CPU, so we need TLB to speed up the translation
+
+### design
+- typically 32-128 entries, usually fully associative
+- random or FIFO replacement policy
+
+### cache & TLB
+![cache & TLB](pic/cache-tlb.png)
