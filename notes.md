@@ -350,3 +350,36 @@ adress translation is expensive, there are four-level page table in the 64-bit C
 
 ### cache & TLB
 ![cache & TLB](pic/cache-tlb.png)
+
+## I/O
+need interface to communicate with devices
+
+### interact with devices
+define a range of addresses for devices, and map them to the device registers
+
+a simple device has two registers:
+- status register
+- data register
+
+but the speed of devices is different from the CPU, so we need to use a special way to interact with devices
+- polling
+- interrupt
+- DMA: need DMA engine
+   - between L1 cache and CPU\
+   free coherency but trash the CPU's working set
+   - between last-level cache and main memory\
+   dont mess with caches but need to manage coherency
+   - dynamic mixing
+
+### example: networking
+need NIC and DMA
+
+#### send
+1. application copies data to OS buffer
+2. OS calculates checksum, starts timer
+3. OS sends data to network interface and says start
+
+#### receive
+1. OS copies data form network interface to OS buffer
+2. OS calculates checksum, if OK, send ACK; if not, delete message
+3. if OK, OS copies data to user address space, and send signal to application to continue
