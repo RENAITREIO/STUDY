@@ -383,3 +383,232 @@ need NIC and DMA
 1. OS copies data form network interface to OS buffer
 2. OS calculates checksum, if OK, send ACK; if not, delete message
 3. if OK, OS copies data to user address space, and send signal to application to continue
+
+## Parallelism
+application: machine learning
+
+### Flynn's taxonomy
+![Flynn's taxonomy](pic/flynn.png)
+
+### SIMD
+Single Instruction Multiple Data
+
+data-level parallelism: operation on multiple data streams
+![parallism](pic/parallelism.png)
+
+XMM registers in SSE: 128 bits
+
+#### example
+```c
+#include <stdio.h>
+// header file for SSE compiler intrinsics
+#include <emmintrin.h>
+
+// NOTE: vector registers will be represented in
+// comments as v1 = [ a | b ]
+// where v1 is a variable of type __m128d and
+// a, b are doubles
+
+int main(void) {
+   // allocate A,B,C aligned on 16-byte boundaries
+   double A[4] __attribute__ ((aligned (16)));
+   double B[4] __attribute__ ((aligned (16)));
+   double C[4] __attribute__ ((aligned (16)));
+   int lda = 2;
+   int i = 0;
+   // declare several 128-bit vector variables
+   __m128d c1,c2,a,b1,b2;
+
+   // Initialize A, B, C for example
+   /* A =                    (note column order!)
+       1 0
+       0 1
+   */
+   A[0] = 1.0; A[1] = 0.0; A[2] = 0.0; A[3] = 1.0;
+
+   /* B =                    (note column order!)
+       1 3
+       2 4
+   */
+   B[0] = 1.0; B[1] = 2.0; B[2] = 3.0; B[3] = 4.0;
+
+   /* C =                    (note column order!)
+       0 0
+       0 0
+   */
+   C[0] = 0.0; C[1] = 0.0; C[2] = 0.0; C[3] = 0.0;
+
+   // used aligned loads to set
+   // c1 = [c_11 | c_21]
+   c1 = _mm_load_pd(C+0*lda);
+   // c2 = [c_12 | c_22]
+   c2 = _mm_load_pd(C+1*lda);
+
+   for (i = 0; i < 2; i++) {
+      /* a =
+          i = 0: [a_11 | a_21]
+          i = 1: [a_12 | a_22]
+      */
+      a = _mm_load_pd(A+i*lda);
+      /* b1 =
+          i = 0: [b_11 | b_11]
+          i = 1: [b_21 | b_21]
+      */
+      b1 = _mm_load1_pd(B+i+0*lda);
+      /* b2 =
+          i = 0: [b_12 | b_12]
+          i = 1: [b_22 | b_22]
+      */
+      b2 = _mm_load1_pd(B+i+1*lda);
+
+      /* c1 =
+          i = 0: [c_11 + a_11*b_11 | c_21 + a_21*b_11]
+          i = 1: [c_11 + a_21*b_21 | c_21 + a_22*b_21]
+      */
+      c1 = _mm_add_pd(c1,_mm_mul_pd(a,b1));
+      /* c2 =
+          i = 0: [c_12 + a_11*b_12 | c_22 + a_21*b_12]
+          i = 1: [c_12 + a_21*b_22 | c_22 + a_22*b_22]
+      */
+      c2 = _mm_add_pd(c2,_mm_mul_pd(a,b2));
+   }
+
+   // store c1,c2 back into C for completion
+   _mm_store_pd(C+0*lda,c1);
+   _mm_store_pd(C+1*lda,c2);
+
+   // print C
+   printf("%g,%g\n%g,%g\n",C[0],C[2],C[1],C[3]);
+   return 0;
+}
+```
+
+for RISC-V, use vector extension
+
+### thread-level parallelism
+#### multiprocesssor
+- shared memory
+- cache separation (except L3 cache)
+
+#### thread
+a thread is a single stream of instructions\
+with a single core, a single cpu can execute many threads by time sharing
+
+#### multicore
+- phisical cpu
+- logical cpu
+- hyperthreading
+
+parallelism
+- SIMD: instruction level parallelism
+   - implemented in all high perf
+- MIMD: thread level parallelism
+   - multicore processors
+   - suppoerted by OS
+
+#### OpenMP
+- a C extension
+- multi-threading, shared-memory parallelism
+
+example
+```c
+#include <stdio.h>
+#include <omp.h>
+int main()
+{
+   omp_set_num_threads(4);
+   int a[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+   int N = sizeof(a)/sizeof(int);
+
+   #pragma omp parallel for
+   for (int i=0; i<N; i++) {
+      printf("thread %d, i = %2d\n",
+            omp_get_thread_num(), i);
+      a[i] = a[i] + 10 * omp_get_thread_num();
+   }
+
+   for (int i=0; i<N; i++) printf("%02d ", a[i]);
+   printf("\n");
+}
+```
+
+#### Fork-Join model
+![fork-join](pic/fork-join.png)
+
+to avoid race condition, use lock
+
+#### hardware synchronization
+atomic read/write\
+read & write in single instruction
+
+RISC-V atomic memory operations
+![atomic](pic/atomic.png)
+
+`amoswap.w.aq`\
+`amoswap.w.rl`
+
+#### openmp locks
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+int main(void) {
+   omp_lock_t lock;
+   omp_init_lock(&lock);
+
+#pragma omp parallel
+   {
+      int id = omp_get_thread_num();
+
+      // parallel section
+      // ...
+
+      omp_set_lock(&lock);
+      // start sequential section
+      // ...
+      printf("id = %d\n", id);
+
+      // end sequential section
+      omp_unset_lock(&lock);
+
+      // parallel section
+      // ...
+   }
+
+   omp_destroy_lock(&lock);
+}
+```
+
+deadlock
+
+openmp timing\
+`double omp_get_wtime(void);`
+
+#### cache coherency
+due to multicore with shared memory but cache separation, cache coherency is needed
+
+state for cache coherency
+1. shared: other caches may have a copy
+2. modified: up-to- date copy in this cache
+3. exclusive: no other cache has a copy
+4. owner: other caches may have a copy
+5. invalid
+
+cache coherency may cause coherency misses
+
+#### Amdahl's law
+$\text{speedup} = \frac{1}{s+\frac{(1-s)}{p}}\le\frac{1}{s}$
+
+### MapReduce & Spark
+request-level parallelism (RLP)
+
+data-level parallelism (DLP)
+- data in memory in parallel
+- data on many disks in parallel
+
+#### MapReduce
+map: split data into chunks, and map each chunk to a key-value pair\
+reduce: group the key-value pairs by key, and reduce the values
+
+#### Spark
