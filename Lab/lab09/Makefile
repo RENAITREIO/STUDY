@@ -1,4 +1,5 @@
-CC=gcc
+CC=clang
+# tests will fail if you use gcc, because sum() is too fast...
 CFLAGS=--std=c99 -Wall
 
 simd: test_simd.o simd.o
