@@ -1,12 +1,12 @@
 # CS61C notes
 ## Intro
 ### great ideas in computer architecture
-- abstraction
-- Moore's Law
-- principle of locality/memory hierarchy
-- parallelism
-- performance measurement & improvement
-- dependability via redundancy
+1. abstraction
+2. Moore's Law
+3. principle of locality/memory hierarchy
+4. parallelism
+5. performance measurement & improvement
+6. dependability via redundancy
 
 ## Number Representation
 ### signed integers
@@ -612,3 +612,50 @@ map: split data into chunks, and map each chunk to a key-value pair\
 reduce: group the key-value pairs by key, and reduce the values
 
 #### Spark
+flatMap in Spark's python api\
+lazy evaluation: only compute when needed\
+parallel
+
+## Datacenters & Cloud Computing
+
+## Dependancy
+### great idea: dependability via redundancy
+- spatial redundancy
+- temporal redundancy
+
+### dependability measures
+- reliability: mean time to failue (MTTF)
+- service interruption: mean time to repair (MTTR)
+- mean time between failures (MTBF = MTTF + MTTR)
+- availability: MTTF / (MTTF + MTTR)
+- annualized failure rate (AFR)
+- failures in time (FIT)
+
+### error detection
+#### memory error
+- soft error
+- hard error
+
+memories protected against soft errors by ECC (error correcting code)
+
+#### Hamming ECC
+![ECC](pic/ecc.png)
+
+using even parity\
+when one bit is wrong, checking the parity will find the error bit
+
+#### RAID
+Redundant Array of Independent Disks
+- RAID 1: disk mirroring
+- RAID 3: parity disk
+- RAID 4: high I/O rate parity
+- RAID 5: high I/O rate interleaved parity
+
+## GPU Architecture
+### CPU vs GPU
+![cpu-gpu](pic/cpu-gpu.png)
+
+maximize throughput, hide latency
+
+### simplified graphics pipeline
+![graphics pipeline](pic/graphics-pipeline.png)
