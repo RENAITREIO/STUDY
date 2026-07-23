@@ -37,7 +37,9 @@ void v_add_optimized_adjacent(double* x, double* y, double* z) {
   // Do NOT use the `for` directive here!
   #pragma omp parallel
   {
-    for(int i=0; i<ARRAY_SIZE; i++)
+    int thread_id = omp_get_thread_num();
+    int thread_num = omp_get_num_threads();
+    for(int i=thread_id; i<ARRAY_SIZE; i+=thread_num)
       z[i] = x[i] + y[i];
   }
 }
@@ -48,7 +50,12 @@ void v_add_optimized_chunks(double* x, double* y, double* z) {
   // Do NOT use the `for` directive here!
   #pragma omp parallel
   {
-    for(int i=0; i<ARRAY_SIZE; i++)
+    int thread_id = omp_get_thread_num();
+    int thread_num = omp_get_num_threads();
+    int chunk_size = ARRAY_SIZE / thread_num;
+    int start = thread_id*chunk_size;
+    int end = thread_id == (thread_num - 1) ? ARRAY_SIZE : (thread_id+1)*chunk_size;
+    for (int i=start; i<end; i++)
       z[i] = x[i] + y[i];
   }
 }
@@ -75,10 +82,12 @@ double dotp_manual_optimized(double* x, double* y, int arr_size) {
   double global_sum = 0.0;
   #pragma omp parallel
   {
+    double local_num = 0.0;
     #pragma omp for
     for (int i = 0; i < arr_size; i++)
-      #pragma omp critical
-      global_sum += x[i] * y[i];
+      local_num += x[i] * y[i];
+    #pragma omp critical
+    global_sum += local_num;
   }
   return global_sum;
 }
@@ -90,9 +99,8 @@ double dotp_reduction_optimized(double* x, double* y, int arr_size) {
   double global_sum = 0.0;
   #pragma omp parallel
   {
-    #pragma omp for
+    #pragma omp for reduction(+ : global_sum)
     for (int i = 0; i < arr_size; i++)
-      #pragma omp critical
       global_sum += x[i] * y[i];
   }
   return global_sum;
@@ -164,6 +172,7 @@ char* compute_dotp(int arr_size) {
 int sobel[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
 void sobel_filter(bmp_pixel **src, bmp_pixel **dst, int row, int col) {
    int res = 0;
+   #pragma omp parallel for collapse(2) reduction(+:res)
    for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 3; j++) {
          bmp_pixel pxl = src[row - 1 + i][col - 1 + j];
@@ -192,6 +201,7 @@ char *image_proc(const char* filename) {
 
    // To parallelize these for loops, check out scheduling policy: http://jakascorner.com/blog/2016/06/omp-for-scheduling.html
    // and omp collapse directive https://software.intel.com/en-us/articles/openmp-loop-collapse-directive
+   #pragma omp parallel for collapse(2)
    for (int i = 1; i < hgt-1; i++) {
       for (int j = 1; j < wid-1; j++) {
          sobel_filter(img.img_pixels, img_copy.img_pixels, i, j);

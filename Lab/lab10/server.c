@@ -2,6 +2,9 @@
 
 char *USAGE = "--files directory/ [--port 8000 --concurrency 5]\n";
 char *report = "report.txt";
+int server_fd;
+int server_port;
+char *server_files_directory;
 
 int main(int argc, char **argv) {
    signal(SIGINT, signal_callback_handler);

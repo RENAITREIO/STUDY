@@ -195,7 +195,6 @@ void dispatch(int client_socket_number) {
    request_handler(client_socket_number, request);
    close(client_socket_number);
 
-   sleep(5);      // Pretending we are doing some heavy computation...
 }
 
 /** Open a TCP socket on all interfaces. *socket_number stores
