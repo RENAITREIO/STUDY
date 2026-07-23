@@ -12,12 +12,12 @@ Plans:
 - [x] CMU 15-213
 - [x] The Missing Semester of Your CS Education
 - [x] CS 168
+- [x] CS 61C
 - [ ] CS 106L
 - [ ] NJU 编译原理 + CS 420
 - [ ] CS 110L
 - [ ] NJU OS
 - [ ] CS 70
-- [ ] CS 61C
 - [ ] EECS 151
 
 
