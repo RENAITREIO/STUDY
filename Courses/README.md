@@ -1,1 +1,0 @@
-# Record of Courses Taken

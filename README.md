@@ -3,23 +3,13 @@
 Just a record for study.
 
 Plans:
-- [x] CS50x
-- [x] Introductory C Programming Specialization
-- [x] CS 106B
-- [x] CS 61A
-- [x] CS 61B
-- [x] EE 120
-- [x] CMU 15-213
-- [x] The Missing Semester of Your CS Education
-- [x] CS 168
-- [x] CS 61C
-- [ ] CS 106L
-- [ ] NJU 编译原理 + CS 420
-- [ ] CS 110L
-- [ ] NJU OS
-- [ ] CS 70
-- [ ] EECS 151
-
+- CS 106L
+- NJU 编译原理 + CS 420
+- CS 110L
+- NJU OS
+- CS 70
+- EECS 151
+- MIT 6.031
 
 ## License
 
