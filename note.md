@@ -87,3 +87,6 @@ a latch is a 1-bit memory\
 ![4-LUT](pic/4-LUT.png)
 
 ## CL
+K-map: a K-ary map is a function that maps K variables to one of the 2K possible values
+- sum of products (SOP)
+- product of sums (POS)
