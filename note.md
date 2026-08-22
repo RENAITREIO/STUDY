@@ -90,3 +90,12 @@ a latch is a 1-bit memory\
 K-map: a K-ary map is a function that maps K variables to one of the 2K possible values
 - sum of products (SOP)
 - product of sums (POS)
+
+### higher dimensional K-maps
+![higher dimensional K-maps](pic/higher_dimensional_K-maps.png)
+
+## FSMs
+- Moore FSM
+- Mealy FSM
+
+### FSM state minimization
