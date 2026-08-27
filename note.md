@@ -126,7 +126,7 @@ qemu显示：Booting from Hard Disk.\
     - _exit() 也是 libc 库函数，会调用 exit_group()，但不会执行 atexit() 注册的函数
     - syscall(SYS_exit, ) 直接执行系统调用 exit() ，不会执行任何清理工作
 
-### process state transition diagram
+#### 进程状态机
 ```mermaid
 graph LR
     Ready -- Scheduled --> Running
@@ -134,8 +134,53 @@ graph LR
     Running -- Descheduled --> Ready
     Blocked -- "I/O: done" --> Ready
 ```
-### 重定向输出 >
+#### 重定向输出 >
 当用 > 重定向输出时，shell 会创建一个子进程，关闭 stdout，打开一个文件描述符，指向文件，按照 Unix 总是分配最小的文件描述符的原则，这个文件描述符会被分配到 1，指向文件。
+
+### 进程的地址空间
+- 隔离与保护：不同进程的地址空间相互独立
+- 便于管理与扩展：程序以为自己占有一大片连续内存 (实际按需分配)
+- 支持共享在隔离的前提下，允许有限的共享
+
+#### 进程 execve 后的进程地址空间
+- ABI 中规定的 initial state (System V ABI)
+    - Section 3.4: “Process Initialization”
+    - 只规定了部分寄存器和栈 (argv 和 envp 中的字符串保存在栈中)
+- Binary 中指定的 PT_LOAD 段
+    - 内存是分成 “一段一段” 的
+    - 每一段有访问权限 (rwx)
+
+#### 地址空间管理 API
+UNIX: brk/sbrk
+> Note that you should never directly call either brk or sbrk. They
+are used by the memory-allocation library; if you try to use them, you
+will likely make something go (horribly) wrong.
+
+Memory Map 系统调用
+```c
+// 映射
+void *mmap(void *addr, size_t length, int prot, int flags,
+           int fd, off_t offset);
+int munmap(void *addr, size_t length);
+
+// 修改映射权限
+int mprotect(void *addr, size_t length, int prot);
+```
+- 瞬间完成内存分配，mmap/munmap 为 malloc/free 提供了机制
+- 映射大文件、只访问其中的一小部分
+
+
+所有和内存相关的功能，底层几乎都是 mmap
+- 内存分配
+    - 进程内的内存分配器会问操作系统要大内存
+    - sbrk/brk 被保留，但操作系统内用 mmap 实现
+    - 再切小了分配给 malloc()
+- Memory-mapped I/O
+    - /dev/gpiomem
+- 进程间共享内存
+    - shm_open() 可以返回一个文件，mmap 实现进程共享内存
+- Just-in-time 生成代码
+    - mprotect 可以改变 mmaped region 的权限 (rwx)
 
 ## 并发
 
