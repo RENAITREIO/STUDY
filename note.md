@@ -96,6 +96,11 @@ K-map: a K-ary map is a function that maps K variables to one of the 2K possible
 
 ## FSMs
 - Moore FSM
+    - synchronous
+    - maybe more states
 - Mealy FSM
+    - asynchronous
+    - maybe fewer states
+    - maybe output glitch
 
 ### FSM state minimization
