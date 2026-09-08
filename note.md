@@ -182,6 +182,35 @@ int mprotect(void *addr, size_t length, int prot);
 - Just-in-time 生成代码
     - mprotect 可以改变 mmaped region 的权限 (rwx)
 
+### 操作系统对象
+读取网络请求、写入文件、和其他进程通信都是访问操作系统对象\
+操作系统设计是为了满足程序员的需求，提供一套简单、稳定的通用 API
+
+#### UNIX: Everything is a file
+一个普适的抽象\
+任何数据流/数组都可以抽象为**文件**，用目录来管理名字
+
+FHS (Filesystem Hierarchy Standard) 规定了 Linux 系统的目录结构
+
+Keep It Simple, Stupid (KISS)
+
+#### 文件描述符：访问操作系统对象的“指针”
+- 0: stdin, 1: stdout, 2: stderr, ...
+- open() 总是分配最小的未使用的描述符
+
+#### 复杂性
+API 直接会相互影响
+- fork() 会复制文件描述符表
+- 实际上会导致系统设计复杂化
+
+Windows Handle API
+- 默认 handle 不继承
+- “最小权限原则”
+
+#### 管道
+mkfifo 创建一个 FIFO 文件，两个进程可以通过它通信\
+int pipe(int fildes[2]); 创建一个仅进程内部可见的管道
+
 ## 并发
 
 ## 持久化
