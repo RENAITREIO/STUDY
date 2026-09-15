@@ -211,6 +211,25 @@ Windows Handle API
 mkfifo 创建一个 FIFO 文件，两个进程可以通过它通信\
 int pipe(int fildes[2]); 创建一个仅进程内部可见的管道
 
+### C 标准库
+构建应用生态：组合、复用、分层
+#### 标准化
+- ISO C, 稳定可靠，移植性
+- POSIX C 的子集 (unistd.h, ...)
+- 有些标准库功能依赖操作系统 (putchar, exit)
+- Freestanding: 不依赖任何 Host OS 功能
+
+#### 机器/平台相关
+- stddef.h, float.h, limits.h, inttypes.h, stdint.h
+#### ABI 相关的参数解析
+- stdarg.h
+    - 寄存器传参，栈传参，实现复杂
+
+#### 库函数
+- string.h: memcpy, memmove, strcpy, ...
+- stdlib.h: rand, atoi, qsort, ...
+- math.h
+
 ## 并发
 
 ## 持久化
