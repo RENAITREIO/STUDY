@@ -79,3 +79,36 @@ virtually implement
 软件系统约定俗成的 Best Practice 是经验的产物
 
 项目 = 由 Atomic Change 推进的快照
+
+文件形式的接口对人类和工具友好，但是丢失不适合文件表达的信息，如 traceability\
+所以就有了 git
+
+学习的目的：形成自己的理解 (first principles)
+
+git 组织了文件、目录、快照之间的关系\
+还可以应对人类的并行开发和冲突合并
+
+从设计上，git 以 commit 为单位，对于 rebase 操作，如果冲突，rebase 后的 commit id 是不一样的，显然存在不和谐
+
+如果用 change 作为单位，显然更 human-friendly，这就是 Jujutsu 的设计理念，甚至不需要 staging area
+
+一种高效的学习方式是，理解正确的设计，再回望历史，理解是如何发展过来的
+
+由于 AI agent 的代码生成能力，git 的设计已不适合 Agent 的协作\
+也许一切需要重新设计适合 Agent 的工具
+
+git 有个好用的功能是 git worktree，允许在同一个 repo 下有多个工作区，方便不同的分支并行开发
+
+人的限制，塑造了工具
+
+版本控制只是工具，软件工程真正的困难在于团队管理\
+人数增加，沟通成本平方级上升
+
+启发
+- 项目不仅是当前状态
+- 记住历史，并行探索，汇合结果
+- 失败也是经验
+
+Minimum Viable Product (MVP)：最小版本验证，仔细考虑架构
+
+早期的 Prompt 对项目的影响最大，任何确定的设计都有可能是潜在的 technical debt，后续的修改成本可能很高
