@@ -218,17 +218,57 @@ int pipe(int fildes[2]); 创建一个仅进程内部可见的管道
 - POSIX C 的子集 (unistd.h, ...)
 - 有些标准库功能依赖操作系统 (putchar, exit)
 - Freestanding: 不依赖任何 Host OS 功能
-
 #### 机器/平台相关
 - stddef.h, float.h, limits.h, inttypes.h, stdint.h
+- offsetof(T, m): 结构体成员 m 在结构体 T 中的偏移量
+- PRIdPTR, PRIuPTR: 可移植的 printf 格式化输出
 #### ABI 相关的参数解析
 - stdarg.h
     - 寄存器传参，栈传参，实现复杂
-
 #### 库函数
 - string.h: memcpy, memmove, strcpy, ...
 - stdlib.h: rand, atoi, qsort, ...
 - math.h
+#### error
+- perror: 打印 errno 对应的错误信息，有语言本地化
+#### Debug Info
+- 可以用 .symtab 做调试信息
+- gcc -gstabs 生成 .stab 符号表，gdb 可以用它调试
+- DWARF：bytecode 指令集，图灵完备，也可用于实现 C++ 异常的 stack unwinding
+- trace/profiler
+- crash dump
+- AddressSanitizer 诊断报告
+#### 可变参数
+- stdarg.h
+- C 语言的可变参数是通过栈实现的，编译器会在函数调用时把参数压入栈中，函数内部通过 va_list、va_start、va_arg、va_end 等宏来访问这些参数。
+#### setjmp/longjmp
+- setjmp 用于保存当前的执行环境（包括寄存器状态、栈指针等）
+- longjmp 用于跳转回之前保存的执行环境，并恢复到那个状态
+- 程序是一个状态机
+#### gettimeofday
+没有使用系统调用，而是进入 vDSO, 这是一个内核提供的共享库，允许用户空间直接访问一些内核功能，从而避免了系统调用的开销。
+#### malloc/free
+- 操作系统本身不支持分配一小段内存
+- 本质是 mmap/sbrk 的封装
+- 对于小内存分配，虚拟内存会用 brk/sbrk 分配堆区（低地址）；对于大内存分配，会直接 mmap 分配内存映射区域（高地址）。malloc 分配堆区的说法其实是不准确的
+- 越小的对象，创建/分配越频繁
+
+> Premature optimization is the root of all evil.\
+> ——D. E. Knuth
+
+#### malloc, Fast and Slow
+- Fast path (System I)
+    - 性能极好、覆盖大部分情况
+    - 但有小概率会失败 (fall back to slow path)
+- Slow path (System II)
+    - 不在乎那么快
+    - 但把困难的事情做好
+#### 空间换简洁
+- 分配: Segregated Lists
+    - 每个 slab 里的每个对象都一样大
+    - fast path → 立即在线程本地分配完成
+    - slow path → mmap()
+- 回收: O(1)
 
 ## 并发
 
