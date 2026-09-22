@@ -270,6 +270,49 @@ int pipe(int fildes[2]); 创建一个仅进程内部可见的管道
     - slow path → mmap()
 - 回收: O(1)
 
+### 链接和加载
+#### 静态链接
+UNIX a.out "assembler output"
+```c
+struct exec {
+    uint32_t  a_midmag;  // Machine ID & Magic
+    uint32_t  a_text;    // Text segment size
+    uint32_t  a_data;    // Data segment size
+    uint32_t  a_bss;     // BSS segment size
+    uint32_t  a_syms;    // Symbol table size
+    uint32_t  a_entry;   // Entry point
+    uint32_t  a_trsize;  // Text reloc table size
+    uint32_t  a_drsize;  // Data reloc table size
+};
+```
+- 没有 offset
+- 不支持动态链接、调试信息、内存对齐、thread-local ...
+#### Linux 加载器
+execve() 会调用内核的加载器，加载 ELF 文件到内存中，并设置进程的初始状态
+
+Shebang (#!) 是 Linux 加载器的一个特性，允许脚本文件指定解释器。例如，`#!/bin/bash` 表示该脚本应由 Bash 解释器执行。
+- POSIX 定义缺陷：解释器参数是作为一个整体传递的，在其他平台上可能会被拆分成多个参数，导致兼容性问题
+- Linux 优先使用 #! 作为解释器，再解析 ELF
+#### 动态链接
+- 动态链接器 (Dynamic Linker) 负责在程序运行时加载共享库
+- 多个程序可以共享同一个共享库的代码段，从而节省内存
+- 动态链接库是位置无关代码
+- 程序的第一条指令是 _dlstart，负责调用动态链接器，加载共享库，并解析符号表，再跳转到 _start
+- 'ld-linux.so' 硬编码在 ELF 文件的 INTERP 中
+- glibc 是用 ld-linux.so 调用 mmap 加载共享库的
+#### man 8 ld.so
+- LD_LIBRARY_PATH: 指定共享库搜索路径
+- LD_DEBUG=libs; ldd
+- LD_BIND_NOW
+- LD_SHOW_AUXV
+- LD_PRELOAD
+    - ld.so: 谁先被加载并首次满足未定义符号，谁就被调用
+    - 可以用来替换系统调用的实现，或者在程序启动时注入自定义的库函数
+#### 共享库的地址
+- 编译/链接时候地址是未知的，但是跳转/访存指令需要一个确定的地址
+- 函数调用跳转到 PLT (Procedure Linkage Table) 的入口，PLT 里有一个跳转到 GOT (Global Offset Table) 的指令，GOT 里存放了函数的实际地址
+- 全局变量访问也是通过 GOT 来实现的，GOT 里存放了全局变量的实际地址
+
 ## 并发
 
 ## 持久化
