@@ -313,6 +313,26 @@ Shebang (#!) 是 Linux 加载器的一个特性，允许脚本文件指定解释
 - 函数调用跳转到 PLT (Procedure Linkage Table) 的入口，PLT 里有一个跳转到 GOT (Global Offset Table) 的指令，GOT 里存放了函数的实际地址
 - 全局变量访问也是通过 GOT 来实现的，GOT 里存放了全局变量的实际地址
 
+#### 第一个进程
+- Linux 内核启动后，会执行 execeve 启动第一个进程，但是执行 execve 需要文件系统的路径
+- 初始状态，会加载 initramfs (initial RAM filesystem)，这是一个临时的根文件系统，包含了启动所需的最小文件和程序
+    - 加载必要的驱动程序
+    - 挂载必要的根文件系统
+    - 将根文件系统和控制权转移给另一个程序
+- `int pivot_root(const char *new_root, const char *put_old);`\
+切换到新的根文件系统 new_root，并将旧的根文件系统挂载到 put_old 目录下
+- 然后执行 `/sbin/init`，这是第一个用户空间进程，负责启动系统的其他进程和服务，在现代 Linux 系统中，通常是 systemd
+
+### 应用生态
+应用生态成就了操作系统的繁荣
+#### Debian 包管理
+deb 包是一个 tar 压缩包，里面包含了程序的二进制文件、配置文件、依赖关系等信息。
+- control.tar.xz
+    - control 文件：包含包的元数据，如包名、版本、依赖关系等
+- data.tar.xz
+    - 实际的文件
+- Preinstall & Unpack → Configure → Triggers → Postinstall
+
 ## 并发
 
 ## 持久化
