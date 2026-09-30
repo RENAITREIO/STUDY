@@ -194,3 +194,30 @@ CQRS (Command Query Responsibility Segregation)
 
 DDD (Domain-Driven Design)
 - 业务概念决定软件边界
+
+本质复杂性
+- 问题本身的复杂性，不是由外部因素引起的，而是问题内在的结构性复杂性
+附带复杂性
+- 由问题的解决方案引入的复杂性，通常是由于我们无法理解
+
+直面本质复杂性，收缩 intent space，分解本质复杂性，减少附带复杂性
+
+our inability to do much\
+枚举、归纳、抽象
+
+好的架构是设计开放需求空间对应的解空间
+
+UNIX Philosophy
+- do one thing and do well
+- write programs to work together
+- write programs to handle text streams, because that is a universal interface
+
+MVC (Model-View-Controller): 让不同的变化各有归属
+
+MVVM (Model-View-ViewModel): 让界面绑定状态
+
+React: 用状态快照描述界面
+
+event sourcing: 把事实、视图、预期分开
+
+SQL 没有把跨数据的任意计算关系作为 first-class citizen
