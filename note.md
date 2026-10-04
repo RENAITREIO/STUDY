@@ -334,5 +334,109 @@ deb 包是一个 tar 压缩包，里面包含了程序的二进制文件、配�
 - Preinstall & Unpack → Configure → Triggers → Postinstall
 
 ## 并发
+### 多处理器编程
+#### motivation
+- syscall 执行期间，CPU 可能会被阻塞，导致 CPU 空闲
+- 多处理器系统共享内存
+#### 并发 & 并行
+- 并发 (Concurrency): 多个任务在同一时间段内交替执行
+- 并行 (Parallelism): 多个任务在同一时间点上同时执行
+#### 困难
+- 不确定性 (Non-determinism): 由于任务的执行顺序不确定，可能会导致不同的结果
+- 非顺序性 (Out-of-order)
+    - 编译器优化: 编译器可能会对代码进行优化，改变指令的顺序，导致程序的执行顺序与代码顺序不一致
+    - CPU 指令乱序执行: CPU 为了提高性能，可能会对指令进行乱序执行，导致程序的执行顺序与代码顺序不一致 (处理器也可以看作是编译器)
+- 宽松内存模型 (Weak Memory Model): 不同的 CPU 核心可能会有不同的缓存，导致不同核心看到的内存状态不一致
+    - store 写入 cache，再同步给其他核心，可能会有延迟
+    - 允许 load 读到 cache 中的旧值，导致不同核心看到的内存状态不一致
+
+> 在某种意义上，编程语言的内存模型比最宽松的硬件内存模型弱，因为编译器优化可能会改变代码的执行顺序，导致程序的执行顺序与代码顺序不一致。----Russ Cox
+#### 控制编译器优化
+- 插入不可优化的内存屏障 (Memory Barrier)
+    ```c
+    asm volatile("" ::: "memory");
+    ```
+- 标记变量 load/store 为 volatile，禁止编译器优化
+    ```c
+    volatile int x;
+    ```
+### 并发控制
+操作系统的系统调用是共享内存的，因此需要并发控制
+#### 单处理器系统：关闭中断
+关闭中断处理使当前代码无法被中断，从而保证了当前代码的原子性。\
+缺点：关闭中断会导致系统无法响应其他中断
+#### 多处理器系统：锁
+- 互斥锁 (Mutex): 通过阻塞的方式获取锁
+    - lock (acquire): 有 🔑，就拿走继续；没有 🔑，需要等待
+    - unlock (release): 把 🔑 放回桌上
+- 自旋锁 (Spinlock): 通过忙等待的方式获取锁
+- 读写锁 (Read-Write Lock): 允许多个读线程同时访问，但写线程需要独占
+#### “一把大锁保平安”
+Linux 内核早期使用 Big Kernel Lock (BKL) 来保护整个内核的并发访问，后来逐渐被细粒度锁取代，以提高并发性能
+#### 线程的必要性
+- 悲观的 Amdahl’s Law
+    - 如果你有 1/k 的代码是不能并行的，那么 $$T_∞ > \frac{T_1}{k}$$
+- 乐观的 Gustafson’s Law
+    - 能并行的并行计算总是能实现的 $$T_p < T_∞ + \frac{T_1}{p}$$
+- 局部性原理 (Locality Principle)
+#### Dekker’s algorithm
+A process P can enter the critical section if the other does not want to enter, otherwise it may enter only if it is its turn.
+```
+status[i] = competing;
+while status[other] == competing do
+    if turn == other then
+        status[i] = out;
+        wait until turn == i;
+        status[i] = competing;
+    end if
+end while
+// 临界区
+turn = other;
+status[i] = out;
+```
+#### Peterson’s Algorithm
+A process P can enter the critical section if the other does not want to enter, or it has indicated its desire to enter and has given the other process the turn.
+```
+flag[i] = true;
+turn = j;
+while (flag[j] && turn == j);
+// 临界区
+flag[i] = false;
+```
+#### Peterson 算法的实现
+假设
+- Load/store 指令是瞬间完成且生效的
+- 指令按照程序书写顺序执行
+
+但是，现代 CPU 不满足这些假设，实际上是错误的
+
+解决方法
+- Compiler barrier (编译优化屏障)
+    - asm volatile(“”: : :”memory”); 或是 volatile 变量
+- Memory barrier (内存屏障)
+    - x86: mfence
+    - ARM: dmb ish
+    - RISC-V: fence rw, rw
+- **实现硬件原子操作**
+    - x86: Bus Lock (locked instruction)
+    - RISC-V: LR/SC & A 扩展
+    - arm: ldxr/stxr, stadd (store add) 指令
+#### 自旋锁：性能问题
+- 除了获得锁的线程，其他处理器上的线程都在空转
+- 应用程序不能关中断，持有自旋锁的线程被切换导致 100% 的资源浪费
+
+#### 操作系统实现锁
+- syscall(SYSCALL_acquire, &lk);
+    - 试图获得 lk，但如果失败，就切换到其他线程
+- syscall(SYSCALL_release, &lk);
+    - 释放 lk，如果有等待锁的线程就唤醒
+- 剩下的都是内核工作
+    - 关中断 + 自旋 （自旋锁只用来保护操作系统中非常短的代码块）
+    - 成功获得锁 → 返回
+    - 获得失败 → 设置线程为“不可执行”并切换
+
+系统调用：futex
+- fast (user-space only) & slow (kernel) path
+
 
 ## 持久化
