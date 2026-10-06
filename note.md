@@ -360,7 +360,7 @@ deb 包是一个 tar 压缩包，里面包含了程序的二进制文件、配�
     ```c
     volatile int x;
     ```
-### 并发控制
+### 并发控制：互斥
 操作系统的系统调用是共享内存的，因此需要并发控制
 #### 单处理器系统：关闭中断
 关闭中断处理使当前代码无法被中断，从而保证了当前代码的原子性。\
@@ -370,7 +370,7 @@ deb 包是一个 tar 压缩包，里面包含了程序的二进制文件、配�
     - lock (acquire): 有 🔑，就拿走继续；没有 🔑，需要等待
     - unlock (release): 把 🔑 放回桌上
 - 自旋锁 (Spinlock): 通过忙等待的方式获取锁
-- 读写锁 (Read-Write Lock): 允许多个读线程同时访问，但写线程需要独占
+    - __atomic_exchange_n()
 #### “一把大锁保平安”
 Linux 内核早期使用 Big Kernel Lock (BKL) 来保护整个内核的并发访问，后来逐渐被细粒度锁取代，以提高并发性能
 #### 线程的必要性
@@ -417,6 +417,7 @@ flag[i] = false;
     - x86: mfence
     - ARM: dmb ish
     - RISC-V: fence rw, rw
+- __sync_synchronize() = Memory barrier + Compiler barrier
 - **实现硬件原子操作**
     - x86: Bus Lock (locked instruction)
     - RISC-V: LR/SC & A 扩展
@@ -435,8 +436,67 @@ flag[i] = false;
     - 成功获得锁 → 返回
     - 获得失败 → 设置线程为“不可执行”并切换
 
-系统调用：futex
+##### 系统调用：futex
 - fast (user-space only) & slow (kernel) path
 
+性能的衡量在于定量研究
+#### 并发数据结构
+- approximate counter
+- concurrent linked list
+- concurrent hash table
+- concurrent queue
+
+### 并发控制：同步
+达到一个全局的一致状态，保证数据的正确性\
+确立 Happens-Before 关系，保证数据的可见性
+#### 条件变量
+- cond_wait: 释放锁，同时立即等待 (原子操作，否则会出现丢失唤醒)
+- cond_wait 等待的线程，通过 signal(&cv) 或 broadcast(&cv) 唤醒
+```c
+// 线程 1
+mutex_lock(&lk);
+// 修改可能使 sync_cond() 成立的共享状态
+cond_broadcast(&cv);    // 唤醒等待的线程
+mutex_unlock(&lk);  // Release
+
+// 线程 2
+mutex_lock(&lk);  // Acquire
+while (!sync_cond()) {    // 条件不成立时进入等待
+    cond_wait(&cv, &lk);  // 等待并自动释放 lk, 被唤醒时重新获得 lk
+}
+// ... 执行后续操作
+mutex_unlock(&lk);
+```
+关键：理解同步的条件
+#### 生产者-消费者问题
+99% 的实际并发问题都可以用生产者-消费者解决
+- Master-slave (scheduler–worker) 模式
+
+Producer 和 Consumer 共享一个缓冲区
+- Producer (生产数据)：如果缓冲区有空位，放入；否则等待
+- Consumer (消费数据)：如果缓冲区有数据，取走；否则等待
+- 同步：同一个 object 的生产必须 happens-before 消费
+#### 计算图模型
+G(V, E): 有向无环的 Dependency Graph
+- 计算任务在节点上
+- 边 (u, v) 表示 v 的计算要用到 u 产生的值
+
+这是一个非常基础的模型，几乎总是可以用这个视角去理解并行计算\
+如果节点 “独立计算时间” 足够长，算法就是可高效并行的\
+计算图也可以是动态的，一边计算，一边产生新的节点
+
+实现
+- 先进行拓扑排序，再按每一层的顺序执行
+- 同步
+    - 为每个计算节点设置一个线程和条件变量 (资源浪费)
+    - 实现一个任务的调度器 (Executor Pool)
+
+同步条件
+- 为每个计算节点分配线程
+    - 对于 u → v，T_u: 完成后为 T_v 生产一份；T_v: 消费 n_predecessors 份后才能继续
+    - T_worker: 生产 ready，消费 job；T_scheduler: 消费 ready，生产 job
+
+#### 信号量
+pthread_mutex 不允许跨线程使用
 
 ## 持久化
