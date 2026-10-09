@@ -450,6 +450,7 @@ flag[i] = false;
 达到一个全局的一致状态，保证数据的正确性\
 确立 Happens-Before 关系，保证数据的可见性
 #### 条件变量
+条件变量是一个显式的队列，线程可以在执行状态不符合预期时将自己放入该队列；当其他线程改变该状态时，它可以唤醒其中一个（或多个）等待的线程，从而允许它们继续
 - cond_wait: 释放锁，同时立即等待 (原子操作，否则会出现丢失唤醒)
 - cond_wait 等待的线程，通过 signal(&cv) 或 broadcast(&cv) 唤醒
 ```c
@@ -468,7 +469,7 @@ while (!sync_cond()) {    // 条件不成立时进入等待
 mutex_unlock(&lk);
 ```
 关键：理解同步的条件
-#### 生产者-消费者问题
+#### 生产者-消费者问题/Bounded Buffer Problem
 99% 的实际并发问题都可以用生产者-消费者解决
 - Master-slave (scheduler–worker) 模式
 
@@ -497,6 +498,161 @@ G(V, E): 有向无环的 Dependency Graph
     - T_worker: 生产 ready，消费 job；T_scheduler: 消费 ready，生产 job
 
 #### 信号量
-pthread_mutex 不允许跨线程使用
+pthread_mutex 非持有者解锁是 undefined behavior\
+我们需要一种能表达“信号”的机制
+
+信号量是带一个计数器的锁
+```c
+void P(sem_t *sem) {  // Acquire
+    mutex_lock(&sem->lk);
+    while (!(sem->count > 0)) {
+        cond_wait(&sem->cv, &sem->lk);
+    }
+    sem->count--;  // 消耗一个 token (信号)
+    mutex_unlock(&sem->lk);
+}
+
+void V(sem_t *sem) {  // Release
+    mutex_lock(&sem->lk);
+    sem->count++;  // 创建一个 token (信号)
+    cond_broadcast(&sem->cv);
+    mutex_unlock(&sem->lk);
+}
+```
+#### 信号量：计算图
+- 为每条边 e: u → v 计数
+    - T_u: work(u); V(e); (做完任务放回 🔑)
+    - T_v: P(e); work(v); (需要 🔑 才能开始)
+- 为每个节点计数
+    - T_u: P(u); P(u); … work(u)
+    - T_v: P(v); P(v); … work(v)
+#### 信号量：生产者-消费者问题
+```c
+sem_t empty = SEM_INIT(depth);
+sem_t fill = SEM_INIT(0);
+
+void T_produce() { P(&empty); printf("("); V(&fill); }
+void T_consume() { P(&fill); printf(")"); V(&empty); }
+```
+信号量
+- 干净、优雅，完美地解决了生产者-消费者问题
+- 但 “count” 不总是能很好地代表同步条件
+
+条件变量
+- 万能：适用于任何同步条件
+- 丑陋：代码总感里有什么脏东西 (spin loop)
+
+信号量不总是 “优雅”\
+“互斥锁是信号量的特例”\
+“信号量是互斥锁的扩展”
+
+很多问题都可以转化为生产者-消费者问题，比如哲学家问题引入“调度线程” T_waiter
+```c
+void T_philosopher(int tid) {
+    while (1) {
+        send_message_to_waiter();
+        P(&can_proceed[tid]);
+    }
+}
+```
+#### 读写锁
+- 读写互斥
+- 写写互斥
+- 读读并发
+```c
+typedef struct _rwlock_t {
+    sem_t lock;         // binary semaphore (basic lock)
+    sem_t writelock;    // allow ONE writer/MANY readers
+    int readers;        // #readers in critical section
+} rwlock_t;
+
+void rwlock_init(rwlock_t *rw) {
+    rw->readers = 0;
+    sem_init(&rw->lock, 0, 1);
+    sem_init(&rw->writelock, 0, 1);
+}
+void rwlock_acquire_readlock(rwlock_t *rw) {
+    sem_wait(&rw->lock);
+    rw->readers++;
+    if (rw->readers == 1) // first reader gets writelock
+        sem_wait(&rw->writelock);
+    sem_post(&rw->lock);
+}
+
+void rwlock_release_readlock(rwlock_t *rw) {
+    sem_wait(&rw->lock);
+    rw->readers--;
+    if (rw->readers == 0) // last reader lets it go
+        sem_post(&rw->writelock);
+    sem_post(&rw->lock);
+}
+
+void rwlock_acquire_writelock(rwlock_t *rw) {
+    sem_wait(&rw->writelock);
+}
+
+void rwlock_release_writelock(rwlock_t *rw) {
+    sem_post(&rw->writelock);
+}
+```
+
+> TIP: Simple and dumb can be better (Hill’s Law)
+
+#### Read-Copy-Update（RCU）
+一种用于实现读多写少场景下的并发控制机制\
+核心思想是：读者无锁读取，写者复制修改，替换指针，延迟释放旧数据。
+
+### 并发：Bug
+#### 死锁 (Deadlock)
+> A deadlock is a state in which each member of a group is waiting for another member, including itself, to take action.
+- AA-Deadlock
+    - 同一个线程，pthread_mutex_lock 同一个锁两次
+- ABBA-Deadlock
+    - 两个线程，pthread_mutex_lock 两个锁，顺序不同
+#### 死锁：必要条件
+打破任何一个条件，就不会发生死锁
+1. Mutual-exclusion - 一把钥匙只能被一个人拿到，拿到钥匙才能继续
+    - 重构代码，加入调度线程
+    - 构建无锁数据结构
+2. Wait-for - 拿到钥匙的人还想要更多的钥匙
+    - 一把大锁保平安，在一个大锁里完成所有操作
+3. No-preemption - 不能抢别人的钥匙
+    - 回滚持有锁线程执行过的操作
+    - `pthread_mutex_trylock()`，但是可能会导致 livelock
+4. Circular-chain - 形成循环等待
+    - Lock ordering
+
+> TIP: Don't always do it perfectly (Tom West's Law)\
+> 可以允许死锁偶尔发生，但要保证死锁可检测，系统能恢复
+#### Lock ordering
+任意时刻系统中的锁都是有限的
+- 给所有锁编号，严格按照从小到大的顺序获得锁
+- 用 &mutex 作为锁的编号最方便
+#### Transactional Memory
+*目前仍作为 GCC 扩展的实验性功能
+`__transaction_atomic`
+#### 数据竞争 (Data Race)
+不同的线程同时访问同一内存，且至少有一个是写
+- C/C++: data race 是 undefined behavior
+- Java Memory Model：试图 “定义” race 的可能行为
+
+情况
+- 上错了锁
+- 忘记上锁
+
+Thread Sanitizer (TSan) 是一个动态检测工具，能够在运行时检测数据竞争和死锁等并发问题。它通过在编译时插入额外的检查代码来监控线程之间的内存访问，从而帮助开发者发现潜在的并发问题。
+
+97% 的非死锁并发 bug 都是原子性或顺序错误
+#### 原子性违反 (Atomicity Violation)
+> “The desired serializability among multiple memory accesses is violated (i.e. a code region is intended to be atomic, but the atomicity is not enforced during execution).
+
+“ABA”: 代码被别人 “强势插入”
+#### 顺序违反 (Order Violation)
+“BA”: 事件未按预定的顺序发生
+
+#### 多线程 fork()
+新进程只会复制调用 fork() 的线程的状态，其他线程不会被复制
+- 复制的线程会继承父进程的锁状态，可能导致死锁
+- 最好 fork() 后立即 execve()
 
 ## 持久化
