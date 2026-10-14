@@ -221,3 +221,36 @@ React: 用状态快照描述界面
 event sourcing: 把事实、视图、预期分开
 
 SQL 没有把跨数据的任意计算关系作为 first-class citizen
+
+agent loop
+- 无工具调用则结束
+
+Ralph loop
+- 同一个任务，检查、修改，直到无法改进
+```sh
+while True: do
+    cat PROMPT.md | claude -p
+done
+```
+
+Everything is a state machine
+- workspace = state, agent = transition
+    - 需求、文档...
+    - 代码实现、测试用例...
+    - 运行结果、日志、TODOs...
+- 每一次开发都是状态迁移
+
+CI/CD
+- First principles: 开发者是不可信的
+- 每次 transition 的检查，每轮都验证并反馈
+- hook-based
+- Continuous Integration
+- Continuous Delivery/Deployment
+
+AI Native 开发：品味转变成约束
+- 将重要的架构品味转化成可检查的规则，而不是只是写在规范文档中
+- 持续进行小规模修复，减少技术债
+
+真正的经验在于实践和反思，失败使你理解架构的修正方向
+
+不尝试、不实践、不失败后反思，就无法理解架构
