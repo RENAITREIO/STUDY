@@ -655,4 +655,85 @@ Thread Sanitizer (TSan) 是一个动态检测工具，能够在运行时检测�
 - 复制的线程会继承父进程的锁状态，可能导致死锁
 - 最好 fork() 后立即 execve()
 
+### 并行算法
+好的 scalability：性能随 CPU/线程/机器增加而增长
+
+scale up (单机) & scale out (多机)：分解问题
+- 只要并行部分所需时间 >> 互斥的时间，就可以 scale
+- 例子：计算图 (DAG) 的深度 v.s. 宽度
+#### 高性能计算 (HPC)
+源自数值密集型科学计算任务
+- 物理系统模拟
+- 矿厂 (proof-of-work)
+- AI 推理
+
+高性能计算程序
+- 可以大规模并行
+- 甚至是 “Embarrassingly parallel” (几乎不需要同步/通信)
+    - Tree search (fork-based dfs)
+    - Monte Carlo 模拟
+    - 视频逐帧处理
+
+科学计算的并行编程
+- MPI: message passing libraries
+- OpenMP: multi-platform shared-memory programming (C/C++ and Fortran)
+- 真正困难的地方：网络通信、功耗管理、稳定性和容错、软件和工具链
+
+### 并行数据结构
+我们可以不需要完全严格的顺序执行
+- 对于 sum++ ，我们可以创建一个 sum_local
+```c
+int sum_local[MAX_TID];
+void T_sum(int tid) {
+    if (++sum_local[tid] == 100) {
+        mutex_lock(&lk);
+        sum += sum_local[tid];  // “Sloppy” counter
+        mutex_unlock(&lk);
+        sum_local[tid] = 0;
+    }
+}
+```
+#### Thread-local
+`thread_local` keyword (C++11/C23)
+- 每个线程会 “自动” 得到一份拷贝
+- 允许是任何类型 (也可以赋初值)
+```c
+thread_local int sum_local;
+
+void T_sum() {
+    thread_local int t;  // Compile error
+    sum_local++;  // 每个线程有自己的 sum_local
+}
+```
+
+Thread-local Storage 实现
+- “.tdata, .tbss” 段 (thread-local 的大小是编译时确定的)
+- x86-64: 用 fs 段寄存器做 TLS base
+- thread_local 在每次线程创建时赋值
+```c
+int x;  // x(%rip)
+
+void foo() {
+    int y;  // y(%rsp)
+}
+
+thread_local int z;  // z(%fs)
+```
+
+#### 数据结构
+- array, list, tree, graph 等数据结构天生是 “分散” 存储的，具有访问的局部性
+    - 读写数据结构的一部分未必需要锁住整个数据结构
+- Key Idea: 锁的拆分
+    - 能用原子指令就不用锁
+    - Reader/writer lock (pthread_rwlock_t)
+    - Segment/element-wise lock
+
+例子：Hash Table
+- 一种高效的 key-value 数据结构
+    - hash(key) 将转化为数组下标，在该位置存储对应的 value
+    - 可以做 per-bucket lock (甚至是读写锁)
+- Open Addressing 的麻烦
+    - 并发的查找、删除、遍历
+    - Resize: 会 “摧毁” 已有的数组
+
 ## 持久化
