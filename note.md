@@ -251,7 +251,9 @@ int pipe(int fildes[2]); 创建一个仅进程内部可见的管道
 - 操作系统本身不支持分配一小段内存
 - 本质是 mmap/sbrk 的封装
 - 对于小内存分配，虚拟内存会用 brk/sbrk 分配堆区（低地址）；对于大内存分配，会直接 mmap 分配内存映射区域（高地址）。malloc 分配堆区的说法其实是不准确的
-- 越小的对象，创建/分配越频繁
+- 小对象：字符串、临时对象等；生存周期可长可短
+- 中对象：容器、复杂的对象；更长的生存周期
+- 大对象：巨大的容器、分配器；很长的生存周期
 
 > Premature optimization is the root of all evil.\
 > ——D. E. Knuth
@@ -680,6 +682,7 @@ scale up (单机) & scale out (多机)：分解问题
 - 真正困难的地方：网络通信、功耗管理、稳定性和容错、软件和工具链
 
 ### 并行数据结构
+一切都可以建模成计算图 (DAG) 的问题\
 我们可以不需要完全严格的顺序执行
 - 对于 sum++ ，我们可以创建一个 sum_local
 ```c
@@ -735,5 +738,211 @@ thread_local int z;  // z(%fs)
 - Open Addressing 的麻烦
     - 并发的查找、删除、遍历
     - Resize: 会 “摧毁” 已有的数组
+
+### 异步编程模型
+#### 线程需要占用资源
+- 内存
+- 分配的 “资源”，例如 pid
+- 线程的切换需要进入操作系统内核代码
+
+启动线程的代价远大于函数调用\
+所以，我们需要一种更轻量级的并行方式
+#### Approach I: 轻量化线程
+放弃中断驱动的上下文切换，在用户空间实现 “线程”
+- 让 spawn 和 join 的代价接近函数调用
+- Coroutine, goroutine, …
+#### 协程：缺陷与解决方法
+- 操作系统里只有一个执行流，read/write 会阻塞整个进程
+- mutex_lock + yield = AA 型死锁
+
+解决：异步 I/O
+- open: O_NONBLOCK
+    - read 可能返回 nread 或者 EAGAIN，然后 yield，再等到有数据可读时再继续 read
+- epoll, eventfd, timerfd, io_uring, …
+#### Go
+我们希望编译器可以自动将同步代码转换为异步代码，这就是 goroutines 的设计理念
+- 每个 CPU 上有一个 Go Worker Thread (协程调度器)
+- 像线程一样使用，像协程一样轻量
+> Do not communicate by sharing memory; instead, share memory by communicating. ——Effective Go
+
+UNIX 时代的并发编程机制：管道\
+Go 语言的 channel 就是管道的抽象，允许在不同的 goroutine 之间传递数据
+
+#### Approach II: 异步编程
+- 改变程序的执行模型，允许描述并行/并发的计算图
+- Promise/Future, async/await, …
+
+#### JavaScript
+设计的有点糟糕
+借鉴了函数式编程的思想，使用事件循环 (Event Loop) 来处理异步 I/O
+
+Web 1.0 到 Web 2.0
+- Asynchronous JavaScript and XML (XMLHttpRequest; ~1999)
+    - 可以随时请求后端，更新 DOMTree: MVC 分离架构
+    - 任何 “应用” 可以做的，网页也都可以做了
+- jQuery $ (2006): A DOM Query Language (编程抽象)
+    - 现代浏览器：$ 就是 document.querySelector
+
+HTML + CSS 构建应用的方便程度超过传统 GUI 编程
+
+我们需要一个更简单的描述计算图的模型
+#### Event-based concurrency
+- 禁止任何计算节点并行
+- 没有任何 Blocking I/O
+
+异步回调 (callback)
+- 在事件完成后排队调用 (success, error)
+- 创建了计算图中的动态节点
+
+“Callback hell (回调地狱)”
+```javascript
+// A → B → C 的顺序逻辑硬生生被拆分成了几个部分，极容易写出屎山代码
+$.ajax({
+    url: '/api/user',
+    success: function(user) {
+        $.ajax({
+            url: `/api/user/${user.id}/friends`,
+            success: function(friends) {
+                $.ajax({url: `/api/friend/${friends[0].id}`, ...});
+            },
+            error: function(err) { ... }
+        });
+    }, ...
+});
+```
+
+`Promise` 是对回调的封装，允许链式调用，避免了回调地狱
+```javascript
+useEffect(() => {
+    fetch(`/api/localhost/?action=demo&path=${path}`)
+        .then(response => response.json())
+        .then(fetchedData => setData(fetchedData))
+}, []);
+
+Promise.all([
+    fetch(...).then(...), fetch(...).then(...), ...
+]).then(
+    // succeeded
+).catch(
+    // error handling (catches exceptions in the fetch)
+)
+```
+> Promise.all() 会立即返回一个新的 Promise
+
+#### Async/Await 语法糖
+同步的写法表达异步的流程，剩下交给编译器
+- async function f() → function f() { return new Promise(…) }
+- await f() → return Promise.resolve(f()).then(…)
+```javascript
+async function fetchData(token) {
+  const response = await fetch(
+    `/api/submissions/?token={token}`
+  )
+  return response.json()
+}
+await Promise.all([fetchData('1234'), fetchData('5678')])
+```
+
+操作系统上的另一个应用生态
+- Angular, React, Vue, Bootstrap, Tailwindcs
+- Express, Next, Nest
+- Electron 和 vscode; Ink 和 Claude code; React Native
+- asm.js, WebAssembly
+- Mermaid, TensorFlow, Three, …
+
+### CPU、GPU 和 SIMT 编程模型
+#### CPU 并行编程
+现代处理器和 Instruction-level Parallelism
+- 逻辑门天然是并行的，可以一个周期译码多条指令、分析数据依赖
+- 完全可以在 CPU 里内置动态数据流分析，实现乱序发射、按序提交
+    - BogoMips (/proc/cpuinfo)，每秒执行 while (loops--) cpu_relax(); 的次数
+        > BogoMips is a value that can be used to verify whether the processor in question is in the proper range of similar processors
+
+CPU 跑得越快，浪费得越多，每一个门电路的翻转都会产生热量，CPU 里的 “编译器” (指令调度) 会消耗巨量的能量\
+热功耗：
+$$P=CV^2f$$
+如何压榨出更多的 performance/watt？
+#### Approach I: 让一条指令能处理更多的数据
+- SIMD (Single Instruction, Multiple Data)\
+一条指令可以同时处理多个数据
+    - 把一个大操作数分成几个小操作数
+        - 例子：把 64-bit 当成 4 个 integers，做 pairwise 乘法
+    - 增加一些 “超大” 的寄存器
+        - 64-bit “mm” 寄存器
+
+寄存器越长，调度代价就被摊薄得越多
+- MMX -> SSE → AVX → AVX-512
+    - 直到碰上内存墙/功耗墙 (AVX-512 已经达到热密度极限)
+- 支持更多的数据类型：int8/16/32 → float32 → float64
+- 支持更多运算 (三操作数模式)
+    - Shuffle: c[i] = a[b[i]]
+    - FMA: a * b + c，一条指令完成
+
+问题：SIMD 指令依然是在 CPU 里调度的，会抢缓存、抢功耗
+- 失败的尝试：Very Long Instruction Word (VLIW)
+    - 完全消灭动态流水线，编译器扛下所有，生成静态指令调度
+- 成功的尝试：简化指令调度，改成横向扩展
+#### Approach II: 用更多更简单的处理器
+- 多处理器系统、异构多处理器系统（大小核）
+    - 同等面积，处理器越简单，数量越多
+
+#### GPU 并行编程
+过去的游戏是以 tile 为基本单位渲染
+- Tile ROM + Tile Map + Attribute Tables
+- 背景卷轴 + sprite
+
+Sprite = (x, y, tile, attr)
+
+PPU (Picture Processing Unit) 是一个专门的图形处理器，负责渲染图像到屏幕上，其完全用电路实现 (fixed-function GPU)
+
+PPU 到 2D 图形渲染管线
+- 动态拼凑图片 (texture) 实现场景的绘制
+- 依然是 “固定循环”，执行完全相同的逻辑
+
+2D 到 3D 图形渲染管线
+- Vertex, Face, Texture, Material, Light, Camera
+    - 三角剖分定理
+    - 3D 空间中的各种变换 (translation, camera projection, …)，在 4D 齐次坐标下是线性的
+- 需要加入深度信息
+
+#### 从数据结构到编程语言
+可编程的 shader 让 GPU 变成了一个通用计算平台
+- Vertext shader: 可以编程修改几何形状
+    - 实现 “扭曲”，例如水面的波纹、毛发的摆动
+- Fragment (Pixel) shader: 可以编程修改颜色
+    - Normal mapping (法线贴图)：远距离观察时 “骗过” 光照计算
+#### GPGPU, SIMT and CUDA
+“Fast matrix multiplies using graphics hardware”
+- 外积分解: $AB = \sum_{k} A_{,k} B_{k,}$
+- 试图把各种计算问题转换为 “图像” 的计算
+- 开辟了 GPU 的通用计算时代
+
+Shader Program
+```c
+__device__ int *screen;
+
+void T_kernel(int row, int col) {
+    int color = f(row, col);  // 任意 C/C++ 代码
+    screen[row * 1920 + col] = color;
+}
+
+for (int row = 0; row < 1080; ++row) {
+    for (int col = 0; col < 1920; ++col) {
+        spawn(T_kernel, row, col);
+    }
+}
+```
+在 GPU 上启动一大堆线程，并行执行，允许访问 shared memory，这就是 CUDA 的基本模型
+
+SIMT 模型\
+可以让一个 “CPU” 管理若干 T_kernel，并且只有一个 PC\
+“Thread warp” 线程束\
+Nvidia Stream Multiprocessor 可以保存多个 (32) warps，load/store stall 可以换另一个
+
+CUDA 程序很难写
+```c
+map[row * 1920 + col] = t;
+map[row + col * 1080] = t; // 等价的写法，可能导致性能大幅下降
+```
 
 ## 持久化
