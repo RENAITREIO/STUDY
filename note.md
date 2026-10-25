@@ -907,7 +907,7 @@ PPU 到 2D 图形渲染管线
 
 #### 从数据结构到编程语言
 可编程的 shader 让 GPU 变成了一个通用计算平台
-- Vertext shader: 可以编程修改几何形状
+- Vertex shader: 可以编程修改几何形状
     - 实现 “扭曲”，例如水面的波纹、毛发的摆动
 - Fragment (Pixel) shader: 可以编程修改颜色
     - Normal mapping (法线贴图)：远距离观察时 “骗过” 光照计算
@@ -944,5 +944,40 @@ CUDA 程序很难写
 map[row * 1920 + col] = t;
 map[row + col * 1080] = t; // 等价的写法，可能导致性能大幅下降
 ```
+
+### 数据中心
+> Datacenter: “A network of computing and storage resources that enable the delivery of shared applications and data.” (CISCO)
+
+数据中心：一个产业链
+
+分布式数据处理
+- 实时的 “小数据处理” (CRUD)
+    - 订单事务、内容分发、用户鉴权、弹幕、计费、视频串流...
+- 半离线的 “中数据处理”
+    - 周期记账、备份、数据看板...
+- 离线的 “大数据处理”
+    - 内容索引、数据挖掘、流量分析...
+#### The C10K Problem
+- 催生了 epoll、Nginx、事件驱动架构，和之前的并发编程模型 (goroutine, etc.)
+#### 并发编程
+- 高吞吐 (QPS) & 低延迟
+- 高可靠性
+#### CAP Theorem
+- 数据保持一致 (Consistency)、服务时刻可用 (Availability)、容忍机器离线 (Partition tolerance) 不可兼得
+
+解决方法：重新设计系统接口
+- 必须把计算分发到机器/线程 (把计算带到数据)
+- 支持透明的网络延迟/容错 (重算)
+
+分布式系统编程
+- 足够好的存储系统 + 描述数据上的计算图 = Serverless Computing
+- Function as a Service: Write Once, Planet Scale
+
+### 历史总是惊人地相似
+- 底层：加速器 (GPU)、底层编程模型 (CUDA)，库函数 (cuBLAS, DeepGEMM, NCCL)
+- 中层：编译器 (FlashAttention, Triton)、训练 (Megatron)、推理 (vLLM) 框架
+- 开发者生态：训练 (PyTorch, TensorFlow)、模型分发 (HuggingFace), …
+- 用户接口：ollama, OpenWebUI, …
+- 应用：Claude Code, OpenClaw, Manvus, NotebookLM, …
 
 ## 持久化
