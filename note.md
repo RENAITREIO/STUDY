@@ -981,3 +981,87 @@ map[row + col * 1080] = t; // 等价的写法，可能导致性能大幅下降
 - 应用：Claude Code, OpenClaw, Manvus, NotebookLM, …
 
 ## 持久化
+### I/O 设备
+“计算” 和 “物理世界” 之间的桥梁\
+I/O 设备 = 一个能与 CPU 交换数据的接口/控制器
+- 一些寄存器 (Status, Command, Data)
+    - 通过握手信号从线上读出/写入数据
+- 映射到内存地址 (Address Decoder)
+    - CPU 可以直接使用指令 (in/out/MMIO) 和设备交换数据
+    - 也可以向计算机发送中断
+#### 简单的 I/O 设备
+- GPIO (General Purpose I/O)
+    - Memory-mapped I/O 直接读取/写入电平信号
+- 串口 (UART) Universal Asynchronous Receiver/Transmitter
+- 键盘控制器
+    - IBM PC/AT 8042 PS/2 (Keyboard) Controller
+    - 6 根线：Data, Clock, VCC, GND, 两个预留
+- 磁盘控制器
+    - ATA (Advanced Technology Attachment)
+    - IDE 接口磁盘 (40pin data 的数据线 + 4pin 电源)
+#### 复杂的 I/O 设备
+任何能 input/output 的东西，都可以是 Canonical Device
+- 打印机：将字节流描述的文字/图形打印到纸张上
+    - PostScript: 一种描述页面布局的 DSL
+        - 类似于汇编语言 (由 “编译器”，如 latex，生成)
+        - PDF 是 PostScript 的 “改进版”
+        - “图形状态机”：路径构造、路径着色、文本渲染、外部对象
+    - 打印机 = “汇编语言解释器”
+        - PCL, PostScript, IPP (AirPrint) → 打印机机械动作
+- 摄像头 (WebCam)
+    - UVC (USB Video Class)
+    - 一个标准化的协议：枚举设备 → 协商格式/分辨率/帧率 → 传输开始 → 逐帧读取 MJPEG/H.264
+    - 所有摄像头都是 “免驱” 的
+#### 协处理器和总线
+打破 I/O 设备与内存之间的边界\
+允许设备访问计算机内的资源
+
+DMA: 一个专门执行 memcpy 的协处理器
+
+异构加速器：GPU 和 NPU
+- 可以执行 `<<< >>>` 中定义的 kernel
+- 但代码和数据都是由 CPU 送过去的 `(cudaMalloc, cudaMemcpy, …)`；送数据又是由 DMA 完成的；控制指令则是 canonical device model
+
+连接万千设备：总线\
+提供设备的注册和转发
+- 把收到的地址 (总线地址) 和数据转发到相应的设备上
+
+PCIe: 今天获得 “CPU 直连” 特殊待遇的标准设备
+- PC: “PCIe lanes”，CPU 负责内存一致性
+- ARM SoC: 内存、PCIe 都挂在高速总线上
+- 高速设备都是直插 PCIe 的：FPGA、显卡、网卡、NVMe、USB Bridge……
+
+基于 PCIe 物理层的 CXL (Compute Express Link)
+- CXL.io, CXL.cache, CXL.memory
+- CXL 3.0 允许设备直接共享内存
+    - “设备” 可以是任何东西：GPU, NPU, 甚至另一台计算机上的内存
+    - “Disaggregated Datacenter” (Memory hierarchy 发生了变化)
+#### 程序视角的 I/O
+操作系统设计者视角：程序不应该直接访问总线/设备寄存器
+##### Everything is a File
+File = 实现了文件操作的「Anything」
+```c
+struct file_operations {
+    struct module *owner;
+    loff_t (*llseek) (struct file *, loff_t, int);
+    ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+    ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+    ...
+}
+```
+把系统调用 “翻译” 成设备能听懂的数据
+##### ioctl
+file 解决了 “数据流” 的问题，但有些设备需要 “命令” 来控制\
+操作系统必须提供一个设备相关的接口
+> The ioctl() system call manipulates the underlying device parameters of special files. In particular, many operating characteristics of character special files (e.g., terminals) may be controlled with ioctl() requests. The argument fd must be an open file descriptor.
+
+“非数据” 的设备功能几乎全部依赖 ioctl -> 堆叠的 💩 山
+- 设备的复杂性是无法降低的
+
+GPU = 一个有自己内存的协处理器
+- 通过 mmap 把内存交给设备驱动/设备
+- 通过 ioctl 提交命令 (doorbell)
+
+Linux DRM (Direct Rendering Manager) 内核模块
+- libdrm: 用户态库，封装 ioctl
+- Mesa: 用户态 OpenGL/Vulkan 实现，通过 libdrm 提交渲染命令
