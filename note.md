@@ -1065,3 +1065,86 @@ GPU = 一个有自己内存的协处理器
 Linux DRM (Direct Rendering Manager) 内核模块
 - libdrm: 用户态库，封装 ioctl
 - Mesa: 用户态 OpenGL/Vulkan 实现，通过 libdrm 提交渲染命令
+
+/dev/kvm: Linux 内核模块，允许用户态程序创建虚拟机
+- Full virtualization
+    - Binary translation
+    - Hardware-assisted
+- Paravirtualization
+
+### 存储设备
+#### 数据持久化：硬件
+持久化：一个能反复改写的状态
+
+磁带 (1D 存储设备)
+- 价格低 (比电路容易制造)、容量高、可靠性高 (适当封装)
+- 顺序读写勉强 (需要等待定位)、随机读写几乎完全不行
+- 冷数据的存档和备份；只需要顺序读 (写) 的场景：音频/视频
+
+磁鼓 (Magnetic Drum)
+- 1D → 1.5D (1D x n)
+- 用旋转的二维平面存储数据 (无法内卷，容量变小)
+- 读写延迟不会超过旋转周期 (随机读写速度大幅提升)
+
+磁盘
+- 1.5D → 2.5D (2D x n)
+- 价格低、容量高、可靠性高
+- 顺序读写：较高；随机读写：勉强
+- 计算机系统的主力数据存储
+- 性能
+    - 读写一个扇区，读写头需要到对应的磁道，转轴将盘片旋转到读写头的位置
+    - 通过缓存/调度等缓解，例如著名的 “电梯” 调度算法
+    - 现在调度算法由磁盘控制器负责 (内置的 CPU)
+
+软盘 (floppy disk)
+- 把读写头和盘片分开——实现数据移动
+- 价格低，容量低，可靠性低
+- 顺序读写：低；随机读写：低
+- 曾经软件的常用发行介质
+
+compact disk (CD)
+- 在反射平面上挖上粗糙的坑，激光扫过表面，就能读出坑的信息来
+- 容易复制，“压盘”
+- 价格奇低，容量中等，可靠性高
+- 顺序读：一般；随机读：低；很难写入 (CD/R & CD/RW)
+- 数字内容分发
+
+Random read + Append-only write = 任何数据结构\
+一个有趣的应用：Project Silica
+
+solid state drive (SSD)\
+闪存
+- 价格低，容量高，可靠性高
+- 极高，而且有极高的扩展性，容量越大，速度越快
+- > Tape is Dead, Disk is Tape, Flash is Disk, RAM Locality is King (Jim Gray, 2006)
+
+开启 “优盘” 时代
+
+Flash Memory 缺陷
+- 放电 (erase) 做不到 100% 放干净，放电数千/数万次以后，就好像是 “充电” 状态了 (Erase Saturation)
+    - QLC: 大约只有 1,000 次写入寿命
+
+解决：软件定义磁盘\
+SSD、优盘，甚至是 TF 卡里都藏了完整的计算机系统
+- FTL: Flash Translation Layer
+- “Wear Leveling”: 用软件使写入变得 “均匀” (虚拟内存)
+    - 维护一个 Logical-to-Physical Table (L2P Table)
+    - Random Read + Append-only Write = 任何数据结构
+
+优盘, SD 卡, SSD 都是 NAND Flash，但软件/硬件系统的复杂程度不同，效率/寿命也不同
+- 典型的 SSD：CPU, RAM, 缓存, store buffer, 操作系统 …
+- SD 卡/TF 卡标准没有规定必须内置 FTL，但实际上都有计算机系统
+- 设备 = 一组寄存器 → 设备可以 “伪造”
+#### 数据持久化：软件
+存储设备的抽象
+- Random Access 的代价：寻址
+    - Die → Plane → Block → Page
+- 减少寻址的代价：按块访问
+    - 存储设备 = 随机读写的 block array
+- Block devices
+    - 按块访问的字节序列 (可以直接 mmap 到进程的地址空间)
+    - 代价：读/写放大 (read/write amplifications)，现在 NVMe ZNS (Zoned Namespaces) 直接操纵 append-only 的 Zone
+
+Linux Bio\
+一个应用程序 “看不见” 的接口
+- 实现 `struct block_device_operations` 和 `struct request_queue`
