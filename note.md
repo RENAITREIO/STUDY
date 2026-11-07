@@ -1093,8 +1093,9 @@ Linux DRM (Direct Rendering Manager) 内核模块
 - 计算机系统的主力数据存储
 - 性能
     - 读写一个扇区，读写头需要到对应的磁道，转轴将盘片旋转到读写头的位置
-    - 通过缓存/调度等缓解，例如著名的 “电梯” 调度算法
+    - 通过缓存/调度等缓解，STF, SSTF, NBF, Elevator, SPTF
     - 现在调度算法由磁盘控制器负责 (内置的 CPU)
+> TIP: IT ALWAYS DEPENDS (LIVNY’S LAW)
 
 软盘 (floppy disk)
 - 把读写头和盘片分开——实现数据移动
@@ -1112,7 +1113,12 @@ compact disk (CD)
 Random read + Append-only write = 任何数据结构\
 一个有趣的应用：Project Silica
 
-solid state drive (SSD)\
+solid state drive (SSD)
+- SLC (Single Level Cell)
+- MLC (Multi Level Cell)
+- TLC (Triple Level Cell)
+- QLC (Quad Level Cell)
+
 闪存
 - 价格低，容量高，可靠性高
 - 极高，而且有极高的扩展性，容量越大，速度越快
@@ -1127,6 +1133,11 @@ Flash Memory 缺陷
 解决：软件定义磁盘\
 SSD、优盘，甚至是 TF 卡里都藏了完整的计算机系统
 - FTL: Flash Translation Layer
+    - direct mapping
+    - log-structured
+    - page-based mapping (plus caching)
+    - block-based mapping
+    - hybrid mapping
 - “Wear Leveling”: 用软件使写入变得 “均匀” (虚拟内存)
     - 维护一个 Logical-to-Physical Table (L2P Table)
     - Random Read + Append-only Write = 任何数据结构
@@ -1148,3 +1159,153 @@ SSD、优盘，甚至是 TF 卡里都藏了完整的计算机系统
 Linux Bio\
 一个应用程序 “看不见” 的接口
 - 实现 `struct block_device_operations` 和 `struct request_queue`
+
+block device 抽象
+- `read_block(id)`
+- `write_block(id, data)`
+
+### 文件系统
+Abstract Data Type\
+也是一种“虚拟化”
+- 内存 → 虚拟内存；磁盘 → 虚拟磁盘 (字节序列 `vector<char>`)
+#### 目录树
+管理文件
+- 信息的局部性
+- 系统中的文件可以组织成层次索引结构
+
+树状分层索引
+```
+.
+└── 学习资料
+    ├── .
+    ├── ..
+    ├── .学习资料(隐藏)
+    ├── ……
+    └── 操作系统
+```
+隐藏 “.” 开头的文件不是操作系统的行为
+```c
+while ((entry = readdir(dir)) != NULL) {  // busybox/coreutils/ls.c
+    if (entry->d_name[0] == '.') {
+        if (!(option_mask32 & (OPT_a|OPT_A))) continue;
+        if (!(option_mask32 & OPT_a) && (!entry->d_name[1] || (entry->d_name[1] == '.' && !entry->d_name[2]))) continue;
+    }
+}
+```
+设备 = 目录树\
+每个设备、每个 partition 都是一个目录树
+- `/dev/nvme0n1p1` (Namespace 1, Partition 1), 优盘、网络 (WebDAV)
+
+Windows
+- 所有操作系统对象的根 `\`
+    - `\\`: Universal Naming Convention 路径 (网络)
+    - `\\server\share` → `\Device\LanmanRedirector\server\share`
+    -  `\` 不能 cd，但可以用 API 访问
+    ```c
+    HANDLE hDevice = CreateFile(
+    "\\\\.\\PhysicalDrive0", GENERIC_READ | GENERIC_WRITE,
+    FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ```
+- 盘符 (历史遗留问题): A:\, B:\, C:\, …
+    - 实际上是 \??\C:\ (\?? 是 per-user 的命名空间)
+    - Windows 为用户隐藏了巨量的复杂性
+
+最小 Linux 启动时，只有 initramfs 和 /dev/console
+- mount: 把块设备上的目录树 “放到” 目录中
+- util-linux 会检测文件系统，最终会调用 mount 系统调用
+
+挂载文件
+- 创建 loopback device
+- 设备驱动把设备的 read/write 翻译成文件的 read/write
+- `drivers/block/loop.c`
+- ioctl(3, LOOP_CTL_GET_FREE)\
+  ioctl(4, LOOP_SET_FD, 3)
+
+FHS (Filesystem Hierarchy Standard)
+> FHS enables software and user to predict the location of installed files and directories.
+#### 目录树 API
+增删改查
+- mkdir: 创建目录
+- rmdir: 删除目录
+- getdents: 读取目录
+```c
+int mkdirat(int dirfd, const char *pathname, mode_t mode);
+int unlinkat(int fd, const char *path, int flag);
+ssize_t getdents64(int fd, void *dirp, size_t count);
+```
+- 创建、打开：open, creat, opendir
+- 读取、写入：read, write, lseek, readdir
+- fork: reference count
+- 复制描述符：dup
+- 重命名：rename, renameat (atomic)
+- 获取元数据：stat, fstat
+
+大多数情况下，write 不会立刻写入磁盘，用 fsync() 来强制写入磁盘
+> Interestingly, this sequence does not guarantee everything that you might expect; in some cases, you also need to fsync() the directory that contains the file foo. Adding this step ensures not only that the file itself is on disk, but that the file, if newly created, also is durably a part of the directory. Not surprisingly, this type of detail is often overlooked, leading to many application-level bugs.
+
+mmap() 和持久化
+- 可以直接把文件映射到内存，读写就像访问内存一样
+- 将代码和数据映射到内存，允许直接执行代码
+- 保存程序的“快照”
+- Serverless computing: 直接把函数映射到内存，允许直接执行函数, FaaS, BaaS
+
+'Globbing'
+- glibc 提供了 glob() 函数，允许使用通配符匹配文件名
+
+硬链接 (Hard Link)：允许一个文件被多个目录引用
+- 文件系统实现的特性 (ls -i 查看)
+- 不能链接目录、不能跨文件系统
+- 删除文件的系统调用称为 “unlink”
+- 现在用 “万能” 的 unlinkat，也可以删除空目录
+- 存在唯一标识符 inode number (low level name) (类似于 pid)，但是跨文件系统不唯一
+
+软链接 (Symbolic Link)：在文件里存储一个路径，指向另一个文件
+- 软链接也是一个文件，记录了另一个文件的路径名
+- 当引用这个文件时，去找另一个文件
+- 另一个文件的绝对/相对路径以文本形式存储在文件里
+- 可以跨文件系统、可以链接目录、……
+- 几乎没有任何限制
+
+软链接：伪造文件系统\
+Nix
+- 将所有软件包的所有版本集中存储在 /nix/store 下，然后用符号链接构建一个虚拟的环境
+- 可以随时随地构建 “任意” 环境
+- 一个 persistent data structure，random read + append-only write = 任意数据结构
+- 随时回滚 `nix-shell -p $(nix-env --list-generations | grep "3 days ago")`
+- 随地构建 `nix-env --switch-generation` 后直接测试
+#### 文件元数据
+`ls -l`: 显示文件的元数据
+- type: d (directory), l (link), p (pipe), c (character device), b (block device), s (socket)
+- mode: rwx (user, group, other)
+- links: 引用计数
+
+Extended Attributes (xattr)
+```c
+ssize_t fgetxattr(int fd, const char *name, void value[.size], size_t size);
+int fsetxattr(int fd, const char *name, const void value[.size], size_t size, int flags);
+```
+- 每个文件可以维护一个任意的 key-value dictionary
+- 但是不是所有文件系统都支持 xattr，ext4 支持，FAT32 不支持，移动后可能丢失
+
+“好用不火” 的操作系统特性
+- 文件系统的向量索引：vectorfs
+- 致命的缺陷：这是后加的特性
+    - 不是所有的文件系统都支持
+    - 兼容性奇差 (cp 需要 –preserve=xattr 才能保留 xattrs)
+
+Access Control List (访问控制列表)
+- 比 user, group, other 更精细的访问控制
+- 格式：[d:]:name:perms
+- 用法
+    - setfacl -m u:jyy:— file
+    - getfacl file
+#### 监控
+文件系统改变可以被监控
+inotify
+文件管理器自动刷新
+编译器自动重载
+#### 快照
+#### 覆盖
+#### FUSE
+
+## Security
