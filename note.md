@@ -1301,11 +1301,113 @@ Access Control List (访问控制列表)
     - getfacl file
 #### 监控
 文件系统改变可以被监控
+
+CRUD 实现
+```bash
+diff <(stat -c '%n %y' **) <(sleep 2; date > a.txt; stat -c '%n %y' **)
+```
+
 inotify
-文件管理器自动刷新
-编译器自动重载
+```c
+int inotify_init(void);  // 返回 fd
+int inotify_add_watch(int fd, const char *pathname, uint32_t mask);
+```
+
+Python watchdog
+```python
+observer = Observer()  # PollingObserver()
+observer.schedule(event_handler, ".", recursive=True)
+observer.start()
+```
+
+应用
+- 文件管理器自动刷新
+- 编译器自动重载
+- Web server 自动 reload
+
+strace, ltrace, inotify, ... 本质上是从操作系统内核执行提取信息，我们可以有一个 programmable 的文件系统监控工具
+
+eBPF (extended Berkeley Packet Filter)
+- 轻量级 in-kernel 只读 virtual machine
+- RISC like, r0-r10 11 个寄存器，在 probe 入口执行，r1 指向 context 结构体
+- `BPF_CALL <helper>`: `bpf_get_current_pid_tgid()`,  `bpf_map_lookup_elem()`, …, side-effect 严格可控
+- 严格的验证器，只允许 bounded execution
 #### 快照
+git：持久化数据结构
+- git reflog 包含所有的历史 trees, commits, etc.
+- 除了 git reset --hard 清除的工作区，只要不 git gc 都可以恢复
+- Git 的三大类对象 (压缩存储在 .git/objects/)
+    - blob: [length] [content]
+    - tree: [mode] [filename][hash]...
+    - commit: tree [hash] parent [hash]...
+- 分支和提交
+    - refs/heads/[branch] 是指向 commit object 的指针
+    - git checkout -b new → 新建一个 new 的文件 (指针)
+    - git commit → 创建 tree/commit object → 更新 refs/heads/[branch]
+- HEAD “指针的指针”
+    - .git/HEAD 文本文件 `ref: refs/heads/main`
+- stash: refs/stash 下的 detached commit
+- rebase
+    ```bash
+    git reset --hard D
+    git cherry-pick A  # git diff CA A | git apply
+    git cherry-pick B  # git diff A B | git apply
+    ```
+
+单线程 -> 多线程
+- worktree
+    ```bash
+    git worktree add ../experiment  # 在另一个目录切换到 experiment 分支
+    cat ../experiment/.git  # 又是一个 “指针”
+    ```
+
+btrfs: persistent data structure in filesystem
+
 #### 覆盖
+目录的“拼凑”
+- 把 upper/ 和 lower/ 拼起来，形成一个 “假” (虚拟化的) 目录，所有的写入都会写到 upper/，重名的，优先看到 upper/ 的版本
+- 光盘打包：多个 cdrw drives，同一个 lower，但 verify-key.exe 是不同的
+- sudo apt dist-upgrade 系统 “试运行” (overlayroot)，直接 rsync 就可以 commit 了
+
+OverlayFS (“UnionFS”, 联合挂载)
+```bash
+mount -t overlay overlay \
+    -o lowerdir=L1:L2:...,upperdir=U,workdir=W \
+    path_to_merged
+```
+- workdir 是文件系统内部使用的临时空间 (用于实现原子性)
+- 只允许一个 upper，但可以有多个 lower
+- 在 merged 里删除 lower 的文件，会在 upper 里创建一个 “whiteout” 文件
+- 网吧管理，系统一键还原
+
+docker: 多层 overlay
+```dockerfile
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+...
+RUN apt-get update
+RUN apt-get install -y ... && apt-get upgrade -y
+```
+- 每一条 RUN 都会创建一个新的 overlay 层，upper 会 “增加” 到下一次 RUN 的 lower stack 顶部
+- 如果要修改某一层的内容，必须重新 build 该层及其上面的所有层，最好是增加一个 RUN
 #### FUSE
+文件系统 = 数据结构\
+那么理所当然，我们可以在用户态实现一个自己的 filesystem\
+Filesystem in User Space (FUSE): 内核把 lookup, read, write, … 转发到 FUSE driver\
+实现 struct fuse_operations
+- 甚至有 int (*setxattr)(const char *, const char *, const char *, size_t, int)
+- 从此文件系统不再是 CRUD，你可以不受任何约束地实现 “任意数据结构”
+- 例子：/proc 里的真正 “隐藏” 目录
+
+FUSE hacks
+- sshfs: 远程目录变成本地目录
+- aitfs: 远程 git 仓库变成本地目录
+- dbfs: 由数据库作为存储的 “安全” 文件系统
+    - 借助 FUSE 可以直接在不一致的文件系统上实现强一致性
+- ffs: 把任何 “数据库” (json, …) 变成文件系统
+- 实现“学习资料”的真正隐藏：getdents64 无法看到，但可以 cd 进入
+- 示例：ggfs: Galgame 文件系统
+
+“Everything is a file 的终极实现”
 
 ## Security
