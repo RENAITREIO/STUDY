@@ -1164,7 +1164,7 @@ block device 抽象
 - `read_block(id)`
 - `write_block(id, data)`
 
-### 文件系统
+### 文件系统 API
 Abstract Data Type\
 也是一种“虚拟化”
 - 内存 → 虚拟内存；磁盘 → 虚拟磁盘 (字节序列 `vector<char>`)
@@ -1307,6 +1307,8 @@ CRUD 实现
 diff <(stat -c '%n %y' **) <(sleep 2; date > a.txt; stat -c '%n %y' **)
 ```
 
+find -newer
+
 inotify
 ```c
 int inotify_init(void);  // 返回 fd
@@ -1394,8 +1396,8 @@ RUN apt-get install -y ... && apt-get upgrade -y
 文件系统 = 数据结构\
 那么理所当然，我们可以在用户态实现一个自己的 filesystem\
 Filesystem in User Space (FUSE): 内核把 lookup, read, write, … 转发到 FUSE driver\
-实现 struct fuse_operations
-- 甚至有 int (*setxattr)(const char *, const char *, const char *, size_t, int)
+实现 `struct fuse_operations`
+- 甚至有 `int (*setxattr)(const char *, const char *, const char *, size_t, int)`
 - 从此文件系统不再是 CRUD，你可以不受任何约束地实现 “任意数据结构”
 - 例子：/proc 里的真正 “隐藏” 目录
 
@@ -1409,5 +1411,151 @@ FUSE hacks
 - 示例：ggfs: Galgame 文件系统
 
 “Everything is a file 的终极实现”
+
+### 文件系统实现
+需要在块设备上实现数据结构
+- bread (load), bwrite (store), bsync (`__sync_synchronize`)
+#### 块设备数据结构
+- 实际的设备
+    - GPT (GUID Partition Table), 是 UEFI 标准的一部分,y也是一个数据结构，可以分出多个 partition
+- 虚拟的设备
+    - LVM (Logical Volume Manager), 是一个数据结构，可以把多个 partition 拼成一个逻辑卷
+        - Physical Volume → Volume Group → Logical Volume (可以一对多、多对一、多对多)
+        - vgdisplay, lvextend, resize2fs
+    - RAID (Redundant Array of Independent Disks), 是一个数据结构，可以把多个 partition 拼成一个逻辑卷，并且提供冗余
+    - NVMe namespace: “硬件级”的 “LVM”
+
+读、写放大
+- bread, bwrite 必须按块读写
+- 更新一个字节 (例如 modification time) 会发生 bread() x 1, bwrite() x 1，会涉及 SSD FTL 的 map table 数据结构更新，因此会发生 read/write 放大
+- 解决方法：缓存
+    - 在更快的存储器 (内存) 中留一份数据 (Linux Buffer Cache, Page Cache)
+    - bread/bwrite 总是访问 cache，如果 cache miss，就要去存储设备里取，异步 write back
+    - Locality 原理
+#### 文件系统设计
+需求
+- persist 的内容
+    - 文件数据 (bytes)
+    - 文件 metadata (name, size, permissions, timestamps, …)
+    - 目录结构 (name → 文件的映射)
+- 统计规律
+    - Most files are small (~2K); a few big files use most space
+    - Directories are typically small (≤20 entries)
+    - File systems are roughly half full
+
+Super Block
+- 数据结构的 “根结构体”
+    - 任何数据结构都需要一个入口：链表 head, 数结构 root, ELF, BMP header, …
+    - 文件系统把 “入口” 放在 Superblock (固定位置)
+- 描述文件系统布局的 “元信息”
+    - Magic number, block size, Total/free blocks, total/free inodes
+    - 数据结构的起始位置、大小、…
+        - mkfs 创建; mount 命令会根据 super block 确定文件系统类型
+- 最关键的一个 block，通常备份多份
+
+FATFS (FAT File System)\
+1. 核心数据结构：File Allocation Table (FAT)
+- 把磁盘分成 clusters (sector 的 2^k 倍), `BPB_SecPerClus`
+- `cluster_t fat[4096];` (FAT-12)，代表每个 cluster 的 next
+    - 0 = free, -1 = EOF
+    - 在 FAT 碎片的情况下，大文件 lseek 会产生显著的读放大
+2. 目录
+- `struct dent entries[0];` “目录文件”，记录目录中的文件信息
+    - DOS 早期设计扩展名 3 个字符，例如文件名 “AUTOEXEC.BAT”，只存储 `AUTOEXEC` 和 `BAT`
+    - 不支持硬链接、长文件名需要打补丁
+
+UnixFS (Unix File System)\
+图结构 G(V, E) 顶点和边分开存储
+- inode (Index Node): Mode, Links, User/Group, Size, …
+    - fstat 直接返回 inode 里的信息即可
+- 通过 bitmap 分配 (相比 FAT 有更好的 locality)
+
+索引：联合数据结构 (Fast/Slow Path) ext2
+- 12 个直接指针 + 1 indirect + 1 double indirect + 1 triple indirect
+- 代价：inode 本身体积变大
+
+目录
+- `using dent = map<string, inode_t>;` 天然支持硬链接
+- ext4: <= 60B 的符号链接直接存储在 inode 中
+#### 文件系统的崩溃一致性
+Crash Consistency
+> Move the file system from one consistent state (e.g., before the file got appended to) to another atomically (e.g., after the inode, bitmap, and new data block) have been written to disk.
+
+数据结构更新涉及 multiple-location writes
+```c
+write(fd, buf, 4096); // append
+```
+- 分配数据块: bwrite(d-bitmap)
+- 写入数据块: bwrite(data)
+- 更新元数据 (size, time, index, …): bwrite(iblock)
+
+层次化存储结构\
+Block cache → queue (DMA) → 存储系统上的计算机 → queue
+- 计算机系统会按照他认为的 “最佳” 顺序写入 (乱序执行)
+    - HDD 的磁头运动规划；SSD FTL
+-  bread, bwrite 就类似是 relaxed memory model
+
+乱序执行时，磁盘掉电时，写入请求的顺序是没有任何保证\
+早期 SSD 还有更严重的问题，FTL crash 后会留下 corrupted data structure\
+崩溃会导致数据丢失、目录损坏，甚至文件系统无法挂载\
+可以用 fsck 尝试把文件系统恢复到一致状态\
+快速格式化只是把 super block, inode bitmap 等清空，文件系统的元数据仍然存在，可以恢复
+
+File System Checking (fsck)
+- 根据磁盘上已有的 G(V, E)，恢复出 “最可能” 的数据结构
+- 同样的也有 git fsck
+
+实现崩溃一致性：重新理解 “数据结构”
+- Append-only 记录所有历史操作
+    - 一旦有历史操作，就可以随时重构实际的数据结构, Write-ahead log (“Redo log”)
+- Store buffer: Store 写入 CPU 本地缓存，慢慢传递给其他处理器
+
+LSM (Log-structured Merge Trees)
+- 只有 MemTable 可写 (例如 Skip List)，带 WAL (crash consistency)
+- MemTable 写满，触发 Flush 向磁盘持久化
+- 磁盘上全是 Immutable SSTable
+    - 如果结构不够好就 Merge (创建新 SSTable), Amortized O(1)
+    - 类比 Memory Hierarchy，小的树会 override 大的树
+
+文件系统中的 Write-ahead Log
+1. 写入 TXBegin; operations，写完后 flush 等待数据落盘
+2. 写入 TxEnd
+3. 写入文件系统 (Checkpointing) & 崩溃恢复
+    - replay(operations) 写入文件系统、回收日志空间
+    - 如果写入时崩溃，fsck 将会 replay(operations) 恢复数据
+
+Journaling Tricks
+- 批处理 (xv6; jbd)
+    - 多次系统调用的 Tx 合并成一个，减少 log 的大小
+    - jbd: 定期 write back
+- Checksum (ext4)
+    - 不再标记 TxBegin/TxEnd
+    - 直接标记 Tx 的长度和 checksum (顺便还检查了日志完整性)
+- Metadata journaling (ext4 default)
+    - 数据占磁盘写入的绝大部分，所以只对 inode 和 bitmap 做 journaling 可以提高性能
+    - 保证文件系统的目录结构是一致的；但数据可能丢失
+#### 应用程序的崩溃一致性
+应用程序的多个写入操作也会被乱序
+
+metadata journaling crash unsafe 例子：
+```c
+Path("a.txt.tmp").write_text(...)
+unlink("a.txt")
+// crash happens here
+rename("a.txt.tmp", "a.txt")
+```
+当 crash 发生在这里，由于 metadata journaling 不对 write() 做 journaling，replay 只会看到 a.txt.tmp 被创建，a.txt 被删除，最终文件丢失
+
+因此，有必要在用户空间实现崩溃一致性\
+sync() 系列系统调用
+- 全局同步
+    - 同步所有文件系统中的所有数据
+    - 性能很差，只在关机/命令行使用
+- 文件描述符同步
+    - `syncfs(fd)`: 同步 fd 对应的文件系统
+    - `fsync(fd)`: 同步文件 data + 全部 metadata
+    - `fdatasync(fd)`: 同步文件 data
+        - 仅同步改变了的数据相关 metadata (size、索引)，比如当文件最后访问时间被修改时，fdatasync 不会同步 inode
+        - 例子：数据库，实现应用程序中的 WAL (实现 bflush 的效果)
 
 ## Security
