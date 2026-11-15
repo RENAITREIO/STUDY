@@ -1558,4 +1558,445 @@ sync() 系列系统调用
         - 仅同步改变了的数据相关 metadata (size、索引)，比如当文件最后访问时间被修改时，fdatasync 不会同步 inode
         - 例子：数据库，实现应用程序中的 WAL (实现 bflush 的效果)
 
+### 数据库
+#### 应用数据持久化
+软件是物理世界过程在信息世界中的投影\
+应用程序天生就有 persistence 的需求\
+本质：数据结构的 CRUD 操作
+
+.pptx 文件本身是一个 zip 归档文件，XML 描述的数据结构 (ISO/IEC 29500)
+- agent 的 ppt 处理 skill 就是些特殊的 prompts，告诉 ai 如何处理
+
+那我们如何持久化数据？
+1. Everything is a file
+- 使用目录树和文件来存储数据结构
+- 可以使用所有 UNIX 工具，甚至可以用 symlink 实现引用
+- agent friendly
+- 但是 crash consistency 实现复杂，性能稍差，有读/写放大问题
+- 小规模系统的选择
+2. 数据结构
+- 直接在文件 (虚拟磁盘) 上构建数据结构，所有 CRUD 都是函数调用
+    ```c
+    struct superblock {
+        struct student *s;
+        struct course *c;
+    }
+    struct student { char stuid[16]; ...  };
+    struct course  { char cid[16]; ...  }
+    ```
+- 可以把数据结构文件 mmap 到内存，直接 persist 指针
+    - mmap region 不会自动 write-back
+    - msync (2),而且 msync 也不保证 crash consistency
+    - fdatasync
+- 可以实现 WAL Log
+    ```c
+    struct superblock {
+        u32 magic;
+        char wal[256];
+        ...
+    };
+    ```
+    - 对于任何数据结构操作，先把所有的 side effects 写入 wal，然后再执行操作，最后清除 WAL
+    - 如果把程序状态也 persist， 那么就可以实现 checkpointing
+    - 'single-level store' (SLS) 操作系统
+#### 关系型数据库
+好的持久化方式就是一个好的数据结构
+- 好用：处理任意类型的数据结构，方便使用
+- 性能：可以 scale
+- crash consistency：崩溃后数据不能丢失，支持 multi-write atomicity (all-or-nothing)
+
+我们常用的数据结构都是 pointer-based\
+Pointer 是对象之间关系表示的一种方式
+```c
+struct node {
+    char value[32];  // Record
+    struct node *left, *right;  // Pointers
+}
+```
+
+但是 pointer 并不是一个足够好的方式
+
+Relational Database (RDB): Everything is a table
+- 一个 surprisingly simple 的模型
+- 每行一个对象；对象可以用 id 索引其他对象
+- struct = table 的一行
+- 查询：指针“配对”
+    ```sql
+    SELECT Courses.Title
+    FROM Student
+    JOIN Takes_Course
+        ON Student.ID = Takes_Course.ID  -- Key
+    JOIN Courses
+        ON Takes_Course.ClassID = Courses.ClassID  -- Key
+    WHERE Student.Name LIKE '张%'
+    ```
+
+数据库系统
+- “ACID” 数据库开启软件的新时代，A (Atomicity), C (Consistency), I (Isolation), D (Durability)
+    - Serializability: 并发执行的效果等价于某种串行执行
+    - Strong crash consistency: 系统 crash 也不会损坏或丢失
+- 支持任意长 (允许混合任意计算) 的 Transaction
+    ```c
+    tx_begin();
+    if (user1.balance < m) tx_abort();  // SQL
+    user1.balance -= m;  // SQL
+    user2.balance += m;  // SQL
+    tx_commit();
+    ```
+
+ACID 数据库
+- 并发执行的效果 = 一把大锁保平安
+- 但性能远优于粗粒度加锁
+- 完全自动的崩溃恢复
+
+关系数据库：海量的实现优化
+- 查询优化 (rewriting)
+- 索引 (B+ Tree 等数据结构)
+- 缓存、分库分表、并发控制、读写分离……
+
+数据库系统：实现
+- 实现查询 = 实现编译优化 (语义等价的 rewriting)
+
+一个超级复杂的并发程序
+- 每个 SQL 都操作数据库的一部分
+    - Write(x)
+    - Read(y)
+- 但并发控制更困难
+    - T_1: tx_begin(); x = 1; may_crash(); y = 2; tx_commit()
+    - T_2: tx_begin(); y = 1; sleep(100000); x = 2; tx_commit()
+        - 2 Phase Locking: 由于 Tx 可以执行任意代码，所以只能 “边执行边上锁” + deadlock detection，遇到死锁就 rollback，commit 时释放
+        - MVCC: 每次都开一个新的 git branch (copy-on-write)，commit 的时候向 main merge，检测到冲突就 rollback
+
+例子：SQLite
+> SQLite is a C-language library that implements a small, fast, self-contained, high-reliability, full-featured, SQL database engine. SQLite is the most used database engine in the world…
+- 一个基于文件实现的支持 SQL 的 “数据结构”
+- Android, iOS, macOS, Chrome, … 中广泛内嵌了 SQLite
+- Zero Configuration
+#### 从 SQL 到 NoSQL, NewSQL
+传统关系型数据库的局限性
+- 数据库引擎压力大，分库、分表、读写分离、索引、缓存、优化……
+- 永远无法预知程序员会写出怎样性能糟糕的 query
+- 提供了功能 = 被滥用 → Performance Bug
+- 任何 “Systems” 都无法避免的 tech debt
+
+解决方法：只支持一个 “够用” 但可以 scale out 的 subset
+- Key-value store
+    - 应用程序全靠 key 管理数据
+    - user:{uid}
+    - user:{uid}:like_history (a list)
+    - List 支持 append/pop/range 等操作
+    - 应用场景：社交平台的点赞/浏览/历史记录
+- 关键的性能优化
+    - 给 key 做 hash，load balance 到多台机器上
+    - Everything is append-only
+        - LSM-Tree; 只支持 append 的 list; …
+    - 分布式高性能、高可靠
+
+Redis: Everything is In-memory
+- 核心：key-value store (GET, SET)
+    - 支持存储数据结构：String, List, Set, Hash, Sorted Set, …, Stream
+    - 支持查询
+    - 甚至支持 MULTI/WATCH/EXEC 事务
+- 应用：高性能缓存
+    - 点赞插入 user:{uid}:like_history; 更新 user:{uid}:like_count
+    - 定期合成一条 persistent 数据库的插入
+
+NoSQL
+- MongoDB (Document)
+    - Key → BSON (Binary JSON，比 JSON 支持更多类型)
+    - 例子：创建一个新 document (message)，然后 append
+- Cassandra (Column)
+    - CQL: 依然是 Table 的模型
+    - 限制程序员的滥用
+
+NewSQL: Google Spanner; TiDB; CockroachDB
+
+Vector Database：AI 应用的新基础设施
+- Embedding model: 将 context 映射为高维向量 (距离越近，语义越近)
+- Vector database: 存储和检索向量的数据库
+    - ANN: Approximate Nearest Neighbor 返回 “最近” 的文档
+
 ## Security
+### 计算机安全
+#### 简介
+过去的“裸奔”时代
+- 8086, Real-Mode
+    - Firmware code 直接映射到地址空间中
+    - int $x → (*(void (*)() *)(4 * x))()，16-bit 时代的 “系统调用”
+    - 任何程序都可以访问任何硬件，病毒可以复制自己，然后感染更多的计算机 (“加壳”)
+    - 例子：CIH 能破坏硬件的病毒
+- BBS
+    - 没有 SSL/TLS，所有的通信都是明文
+    - 任何人都可以监听、篡改、伪造通信
+
+信息安全三要素
+- 保密性 (Confidentiality)：不想给别人看的，别人就看不到
+    - 快速格式化可以恢复
+- 完整性 (Integrity)：不想让别人改的，别人就改不了
+    - XSS, 中间人攻击 (MITM)
+- 可用性 (Availability)：我的服务，别人不能让我用不了
+    - DDoS, Algorithmic Complexity Attack (ACA)
+#### 密码学速通
+- One-way functions
+    - 有一个正向好算、逆向难算的 f(x) = y
+    - 例子：密码学哈希 (SHA-256, …)，表现得近乎 “完全随机”
+- Trapdoor one-way functions
+    - 多了个 “后门” t (私钥)，有了 t 之后，f(x) = y 逆向变得好算
+    - 正过来用 (confidentiality): Alice 公开 f (公钥) → Bob 公开传输 f(m) → Alice 解密得到 m
+    - 反过来用 (integrity): Alice 公开 f → Bob 发送一个随机的 c → Alice 用 t 求解 f(r) = c，公开 r → 任何人都可以验证 f(r) = c (证明 Alice 有 t) (数字签名)
+- 应用：区块链
+    - 一个全球共享的 (低效) append-only log
+    - Killer Application: 加密货币，~~洗钱~~
+#### 访问控制
+进程 + 虚拟内存已经实现了隔离
+- 进程只能以 ELF 规定的权限访问自己的虚拟地址空间
+- 一切对操作系统世界里的 “共享” 对象访问，都通过系统调用
+
+访问控制：限制程序对操作系统对象的访问
+- 拒绝越权访问 → Confidentiality
+- 拒绝越权修改 → Integrity
+- 公平的系统调用实现 → Availability
+
+访问控制原理就是一张表，越权访问，直接返回 EACCESS (Permission denied)\
+问题在于如何存储和维护这张表
+
+UNIX: 用整数表示身份
+- uid = 0 → root, 其他都是 “普通用户”
+    - root 可以访问所有对象，也可以 setuid 变成其他用户
+    - 子进程继承父进程的 uid
+- gid “完全自由” (一般 0 是 root)
+    - 一个用户可以属于多个组
+- mode: r, w, x 的权限
+    - 例子：owner 只写不可读，audit 组可以读的日志文件
+
+操作系统完全看不到用户名
+- 通过 setuid, setgid, chmod 系统调用实现访问控制
+- Android: 每个 app 都是不同的用户
+
+/etc/passwd: 每行一个用户
+- username:password:uid:gid:comment:home:shell
+    - 现代系统通常使用 shadow 文件存储密码的 hash
+    - chsh, passwd 只是修改了此文件
+
+UID family: 💩⛰️
+- Real uid (ruid)
+    - 真实用户身份
+- Saved uid (suid)
+    - 为了实现 “恢复权限” 而设计
+    - 程序可以主动降级 euid，保存到 suid，之后可以恢复 euid
+- Effective uid (euid)
+    - 这是实际访问控制使用的 uid
+    - /bin/passwd 的 euid = 0，实际上是 root 执行的
+- Filesystem uid (fsuid)
+    - 用于独立控制文件系统访问权限 (Since Linux 1.2)
+    - 内核内部仍使用，但应用程序极少独立设置
+- setuid 机制：chmod +s (ls -l /bin/passwd 看见红色标识)
+
+我们希望的是维护任意的 access control matrix，即(进程、对象、访问) → bool，而 uid, gid, mode 并不是实现访问控制的唯一方法\
+从这个 matrix 里 “切割” 出一部分进行控制
+- Access Control List; acl (5)
+    - 以文件为单位，支持为用户和组分别设置权限
+    - 基于 xattr 实现
+- SELinux/AppArmor; apparmor (7)
+    - 更细粒度的对象级访问控制
+    - SELinux: Mandatory Access Control (MAC)，甚至连 root 都不能越权访问
+- Capabilities
+    - root 行为类的切片
+    - `capsh --drop=cap_net_raw -- -c 'ping 127.0.0.1'`，剥夺了 CAP_NET_RAW，将会 ping 失败
+    - `getcap` 查看 capabilities
+- 像 eBPF 一样，直接写一个 access control function
+    - seccomp (2): 限制系统调用的访问控制
+    - LSM BPF; Linux Kernel 5.7+
+#### 软件系统安全
+程序中隐藏着万千 “无人理解” 的路径，永远无法预期用户会如何使用程序，更不要说恶意的使用\
+所以我们需要遍历意外的输入
+
+Fuzz Testing: 自动生成大量 “非预期” 输入，观察程序是否你如异常状态
+- AFL (American Fuzzy Lop)
+- OSS-Fuzz
+
+hack 一个进程\
+缓冲区溢出
+- 覆盖返回地址，执行任意代码
+- Return-oriented programming
+
+防御
+- 减少攻击面
+    - 访问控制 (禁止对越权对象的访问)
+    - 执行保护 (使漏洞难以利用)
+        - 随机地址空间 (ASLR)、内存保护 Canary (stack protector), NX-bit (no execute), 控制流完整性 CFI/Intel CET (endbr64 = Indirect Branch Tracking), …
+    - 审计与阻断
+        - auditd: Linux 原生的审计系统
+        - Tetragon: 基于 eBPF 的审计系统，程序只能按照 “预期” 的方式访问对象
+
+所有看起来都 “合法” 的访问，也可能存在非法行为
+- Tenex 系统认证漏洞: 通过虚拟内存分页机制的时间差泄露密码
+```c
+// Authentication system call
+int check_password(__user char *given_pass) {
+    ...
+    for (i = 0; i <= strlen(correct_pass); i++)
+        if (correct_pass[i] != given_pass[i]) {
+            sleep(3);
+            return EACCESS; // access denied
+        }
+    return 0;
+}
+```
+
+Timing side channel attack
+```c
+raise_exception();  // even an HTM abort
+uint8_t volatile x = probe_array[data * 4096];
+```
+- Meltdown
+    - 缓解：Page Table Isolation (PTI)
+    - 把内核的绝大部分内存从用户态的页表里直接删掉
+- Downfall
+- Inception
+- GhostRace
+- 乱序、投机执行
+
+更逆天一点的攻击
+- 超视距窃听: Electromagnetic eavesdropping risks of flat-panel displays; 天线和显示器相距 10m，间隔三层石膏板
+- Physical key extraction attacks on PCs
+- 把内存条冷冻以后拆下来 Cold boot attack
+
+Agent 时代的安全\
+Prompt Injection (jailbreak)
+- LLM 已经被微调成安全
+- 但总有一些 “ignore all previous instructions” 的方法
+- 无法绝对防御，只能通过沙箱/访问控制解决
+
+供应链攻击：甚至不能信任你的软件 (社会工程学)
+- 直接推送攻击的版本：npm package
+- 卧薪尝胆: xz-utils 后门
+
+### 虚拟化和容器
+#### 全系统虚拟化
+NEMU: full system emulator
+- 性能极差
+
+QEMU dyngen (早期版本)
+- 借用一个有优化能力的编译器，为每条指令生成优化后的本机代码
+- 运行时把连续的非跳转指令用 memcpy 组装起来 + relocate
+- 例子
+```c
+// addi r1, r1, -16
+// 手写的汇编 (T0 通常是寄存器) 组装而成
+// op_movl_T0_r1
+// op_addl_T0_im
+// op_movl_r1_T0
+void op_addl_T0_im(void) {
+    T0 = T0 + ((long)(&__op_param1));
+}
+```
+
+Just-in-time: 把连续的指令代码交给编译器优化
+
+以前的 ISP (Internet Service Provider) 提供的是物理机，绝大多部分的 CPU 空闲率很高\
+商机：当然可以使用虚拟化虚拟出多个虚拟机，提供给不同的用户使用，而且保证可以获得同等的性能
+
+Y Combinator 的名字来源于 lambda 演算的 Y combinator，Y(f) = f(Y(f))，可以实现递归
+```python
+def Y(f):
+    def wrapper(*args):
+        return f(wrapper)(*args)
+    return wrapper
+
+factorial = Y(lambda f: lambda n: 1 if n < 2 else n * f(n - 1))
+```
+
+Disco: Virtual machine monitors
+- 加入抽象层，欺骗 OS
+- VMWare 的前身
+- 普通指令直接执行
+- 模拟所有 “有系统级副作用” 的指令，例如关中断、I/O
+    - 包括所有对 CR3 和页表的修改
+    - “改写” 一份页表到 CR3 (Shadow Page Table)
+- 降级到 Ring 1，patch 相应特权指令，替换成自己的 call
+
+更多技术方案：Xen and the art of virtualization
+- 半虚拟化 “Paravirtualization”: 修改操作系统，主动配合虚拟化
+- 非特权代码直接执行 (Ring 1)，做分页、中断等操作 trap 到 Ring 0
+
+影响硬件设计
+- Intel: VT-x (2005) → VT-d (2006) → EPT (2008)
+- Virtual I/O Device (VIRTIO)
+
+管理操作系统状态
+- ReVirt
+    - 时间转移：“replay the long-term, instruction-by-instruction execution of a computer system.”
+- 虚拟机迁移
+    - 空间转移：“a system that moves a computer’s state over a slow (384kbps) DSL link in minutes rather than hours.”
+
+#### 操作系统虚拟化
+另一种思路：操作系统自己虚拟化
+
+操作系统：“假装” 在虚拟机里执行系统调用\
+例子：虚拟的 pstree
+- pid = 1: init (systemd)
+
+pid 可以不再是整个操作系统唯一的
+- 给每个进程增加一个 “osid”，增加系统调用 vos(fs_root)
+- 创建一个新的 osid，pid 从 1 开始分配，fork() 继承父进程的 osid
+
+pidfs\
+pid 是会回收利用的
+```bash
+ps | grep SomeProcess
+kill -9 31181
+```
+- 如果相隔时间太长，就可能错杀其他进程
+- pid 机制是无法避免 TOCTTOU 问题的
+
+pidfs: Everything is a file
+- `pidfd_open(pid)` → 获得 fd
+- `pidfd_send_signal(fd, sig)` → 给进程发信号
+- fd 是稳定的引用，不受 PID 回收影响
+- 一旦作为 fd 打开，进程就会增加一个引用计数，进程数据结构就不会回收
+- “leaky abstraction”：TOCTTOU、僵尸进程、托孤……
+
+chroot (1979, Version 7 Unix)
+- 把进程的文件系统视图限制在某个子目录下
+    - `chroot(“/path/to/root”)`
+    - 进程看到的 / 就是 “/path/to/root”
+- 只虚拟化了文件系统一个命名空间
+    - PID、网络、用户……都还是共享的，容易逃逸
+
+虚拟化需要管理的对象
+- pid
+- user: 用户和组
+- mnt: 文件系统和设备
+- ipc: 信号量、消息队列、共享内存
+- net: 网络设备、协议栈、端口 (localhost:5000)
+- time: 系统时间和时区
+- uts: 主机名和域名
+- Linux namespaces: /proc/[pid]/ns/
+    - lsns 可以查看上面列出的所有命名空间
+
+Linux Namespaces
+- clone: 创建进程时可以带 CLONE_NEW_xxx (PID, IPC, …) 选项
+- setns, unshare: 改变某一个对象的 “osid”
+
+cgroups: 实现资源的控制
+- “圈一些进程”，设定资源使用策略
+- cat /proc/*/cgroup; /sys/fs/cgroup
+
+namespaces + cgroups + overlayfs = 容器 (container)
+
+云时代的虚拟机
+- 容器
+    - 和虚拟机一样
+    - 开销比虚拟机低很多，安全性略低
+- Kubernetes (K8s): “容器编排”
+    - 动态、透明管理的 “无状态” 容器 Pod (虚拟机)
+        - 容器出错、网络异常、节点崩溃都可以随时在另一个地方重启
+    - 声明式的访问和路由
+        - 配置好之后，只要访问 Gateway API，自动路由到正确的容器
+        - 自动的负载均衡、健康检查……
+
+“云原生” 的时代
+- 机器不可靠 → 多副本、自动故障转移
+- 人工不可靠 → 声明式，运维全部交给系统
+- 环境不可靠 → 容器化确定性
