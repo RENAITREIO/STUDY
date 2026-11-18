@@ -4,7 +4,6 @@ Just a record for study.
 
 Plans:
 - NJU 编译原理 + CS 420
-- NJU OS
 - CS 70
 - EECS 151
 - explore Linux kernel, LLVM, IC design engineering and AI accelerator
