@@ -1477,6 +1477,17 @@ UnixFS (Unix File System)\
 目录
 - `using dent = map<string, inode_t>;` 天然支持硬链接
 - ext4: <= 60B 的符号链接直接存储在 inode 中
+
+Fast Filesystem (FFS)
+- 从磁盘开头查找 inode 到 data 需要多次寻道，性能很差
+- cylinder groups
+    - 将大磁盘分成多个“小磁盘”
+    - 每个 group 都有 super block 备份，inode bitmap, data bitmap, inode table, data blocks
+    - 每个文件的 inode 和 data 都尽量放在同一个 cylinder group 里
+    - 目录里的文件尽量放在同一个 cylinder group 里
+- locality 原理
+- 大文件将会跨越多个 cylinder group，导致性能下降，但是通过增大块大小进行摊销
+- 小文件引入 sub-block，减少内部碎片
 #### 文件系统的崩溃一致性
 Crash Consistency
 > Move the file system from one consistent state (e.g., before the file got appended to) to another atomically (e.g., after the inode, bitmap, and new data block) have been written to disk.
@@ -1503,6 +1514,7 @@ Block cache → queue (DMA) → 存储系统上的计算机 → queue
 
 File System Checking (fsck)
 - 根据磁盘上已有的 G(V, E)，恢复出 “最可能” 的数据结构
+- 性能很差
 - 同样的也有 git fsck
 
 实现崩溃一致性：重新理解 “数据结构”
@@ -1516,13 +1528,16 @@ LSM (Log-structured Merge Trees)
 - 磁盘上全是 Immutable SSTable
     - 如果结构不够好就 Merge (创建新 SSTable), Amortized O(1)
     - 类比 Memory Hierarchy，小的树会 override 大的树
+> TIP: Whenever your system has a fundamental flaw, see if you can turn it around into a feature or something useful.\
+> LFS 需要定期后台回收垃圾块，十分耗时，不如我们将其做成一个保留旧版本的 feature，这就是**快照** (NetApp WAFL)
 
 文件系统中的 Write-ahead Log
 1. 写入 TXBegin; operations，写完后 flush 等待数据落盘
 2. 写入 TxEnd
-3. 写入文件系统 (Checkpointing) & 崩溃恢复
+3. 写入文件系统 (Checkpointing)
     - replay(operations) 写入文件系统、回收日志空间
-    - 如果写入时崩溃，fsck 将会 replay(operations) 恢复数据
+    - 如果写入日志时崩溃，没有 TxEnd，直接丢弃日志
+    - 如果写入文件系统时崩溃，replay 日志，保证文件系统的一致性 (写一半也没事，因为写入操作是幂等的)
 
 Journaling Tricks
 - 批处理 (xv6; jbd)
@@ -1747,6 +1762,19 @@ Vector Database：AI 应用的新基础设施
 - 应用：区块链
     - 一个全球共享的 (低效) append-only log
     - Killer Application: 加密货币，~~洗钱~~
+
+Diffie‑Hellman Key Exchange
+- Alice 和 Bob 公开一个大素数 p 和一个生成元 g
+- Alice 选择一个随机数 a，计算 $A = g^a$ mod p，发送给 Bob\
+  Bob 选择一个随机数 b，计算 $B = g^b$ mod p，发送给 Alice
+- Alice 计算 $K = B^a$ mod p，Bob 计算 $K = A^b$ mod p
+- 由于 $(g^a)^b$ mod p = $(g^b)^a$ mod p，Alice 和 Bob 得到相同的 K
+
+如何证明身份和信任？\
+证书：信任链
+- 公钥的传递可以被篡改，必须有一个可信的第三方来签发证书
+- 由权威机构签发，用于证明某个实体的身份和其公钥的合法性
+- 例子：CA (Certificate Authority) 颁发的 SSL/TLS 证书
 #### 访问控制
 进程 + 虚拟内存已经实现了隔离
 - 进程只能以 ELF 规定的权限访问自己的虚拟地址空间
@@ -1771,11 +1799,11 @@ UNIX: 用整数表示身份
 
 操作系统完全看不到用户名
 - 通过 setuid, setgid, chmod 系统调用实现访问控制
-- Android: 每个 app 都是不同的用户
+- Android: 每个 app 都是一个独立的用户，通过 SELinux 进行访问控制
 
 /etc/passwd: 每行一个用户
 - username:password:uid:gid:comment:home:shell
-    - 现代系统通常使用 shadow 文件存储密码的 hash
+    - 现代系统通常使用 /etc/shadow 文件存储密码 (+salt) 的 hash 
     - chsh, passwd 只是修改了此文件
 
 UID family: 💩⛰️
@@ -1791,6 +1819,8 @@ UID family: 💩⛰️
     - 用于独立控制文件系统访问权限 (Since Linux 1.2)
     - 内核内部仍使用，但应用程序极少独立设置
 - setuid 机制：chmod +s (ls -l /bin/passwd 看见红色标识)
+- `drwxrwxrwt root root /tmp`: sticky bit，只有文件 owner 才能删除自己的文件
+- SGID: 临时变成文件所属 group，之后恢复原来的 group (/tmp 黄色标识)
 
 我们希望的是维护任意的 access control matrix，即(进程、对象、访问) → bool，而 uid, gid, mode 并不是实现访问控制的唯一方法\
 从这个 matrix 里 “切割” 出一部分进行控制
@@ -1807,6 +1837,9 @@ UID family: 💩⛰️
 - 像 eBPF 一样，直接写一个 access control function
     - seccomp (2): 限制系统调用的访问控制
     - LSM BPF; Linux Kernel 5.7+
+
+观察：大型团体组织中，每个不同角色的成员所需要的权限不同
+- RBAC (Role-Based Access Control): 角色 → 权限
 #### 软件系统安全
 程序中隐藏着万千 “无人理解” 的路径，永远无法预期用户会如何使用程序，更不要说恶意的使用\
 所以我们需要遍历意外的输入
