@@ -1,0 +1,2035 @@
+# 操作系统原理
+
+## 绪论
+### 操作系统定义
+> Operating System: A body of software, in fact, that is responsible for making it easy to run programs (even allowing you to seemingly run many at the same time), allowing programs to share memory, enabling programs to interact with devices, and other fun stuff like that. (OSTEP)
+### 发展历程
+库函数批处理 -> 设备保护 -> 多程序调度 -> 资源虚拟化 -> 现代OS
+
+### 软件视角
+#### 最小程序 (JustForFun)
+从`void _start()`开始，仅使用系统调用`write` `exit`实现 hello world 输出，并裁切多余节头，体积减少了将近90倍。
+#### 系统调用指令：请求操作系统系统服务
+syscall (x86-64), ecall (risc-v), svc (aarch64)\
+只有它可以打破 “程序状态” (memory/register) 的边界
+#### OS上的程序
+- Applications
+- Utilities
+- Daemons
+#### 操作系统中的任何程序
+- 总是从被操作系统加载开始
+    - 通过另一个进程执行 execve 设置为初始状态
+- 经历状态机执行 (计算 + syscalls)
+    - 进程管理：fork, execve, exit, …
+    - 文件/设备管理：open, close, read, write, …
+    - 存储管理：mmap, brk, …
+- 最终调用 _exit (exit_group) 退出
+
+操作系统 = 对象 + API
+
+### 硬件视角
+执行机器指令的状态机\
+从 CPU Reset 开始执行，首先执行 **Firmware** 的代码
+#### Firmware
+厂商固定在计算机里的代码
+- 完成硬件扫描，初始化和配置
+- 不严格的说，加载操作系统
+
+firmware 可以说就是一个小“操作系统”，初始化硬件，对接 Boot Loader
+
+Legacy BIOS (Basic I/O System) -> UEFI (Unified Extensible Firmware Interface)
+
+#### IBM PC/PC-DOS 2.0 (1983)
+Firmware (BIOS) 会加载磁盘的前 512 字节到 0x7c00\
+让我们试试：
+```bash
+(printf "\xeb\xfe"; cat /dev/zero | head -c 508; printf "\x55\xaa") > a.img
+qemu-system-x86_64 a.img
+```
+qemu显示：Booting from Hard Disk.\
+开头的`eb` `fe`是`jmp $-2`，跳转回自身，形成死循环\
+结尾的`55` `aa`是 Boot Signature，表示这是一个合法的 Boot Sector
+
+#### Grub 的例子
+- Stage 1: 扫描磁盘，找到附近的 ELF 文件头，加载到内存
+    - 根据文件系统，可能会需要 Stage 1.5
+- Stage 2: 这个 ELF 文件是 Grub; 弹出熟悉的选择系统窗口
+- Stage 3: 加载 Linux Kernel
+
+## 虚拟化
+### 程序与进程
+先前的 Tower of Hanoi 的非递归版本，本质上是一个解释器，模拟了栈并解释执行。\
+参照这样的思想，我们可以在程序里模拟任何 “另一个程序” 执行，这就是一个简单的操作系统。
+#### 程序
+程序是语义 (状态机) 的静态描述
+- 描述了初始状态和迁移规则
+- 程序运行起来，就成了进程 (进行中的状态机实例)
+#### 进程
+程序的运行时状态随时间的演进
+##### 查询进程状态
+- procfs
+    - /proc/[pid]/
+    - 通过 readdir, open, read 访问进程信息
+- syscalls
+    - getpid(), getppid(), getpgrp(), getsid(), getuid(), geteuid(), getgid(), getegid(), ……
+##### 进程管理
+操作系统 = 状态机的管理者\
+进程管理 = 状态机管理
+1. fork()
+- 立即复制状态机，包括所有状态的完整拷贝，包括寄存器 & 每一个字节的内存
+- Caveat: 进程在操作系统里也有状态: ppid, 文件, 信号, … （小心这些状态的复制行为）
+- 复制失败返回 -1，errno 会返回错误原因
+- 新创建进程返回 0，执行 fork 的进程返回子进程的进程号——“父子关系”
+
+    进程树
+    - 进程的创建关系形成了进程树
+    - A → B → C，如果 B 终止了……C 的 ppid 是什么？
+        - 子进程结束会通过 SIGCHLD 信号通知父进程
+        - 孤儿进程由 init 进程接管
+    ```bash
+    # Fork Bomb
+    :(){ :|:& };:
+    ```
+    应用
+    - 共享信息预处理
+        - fork 进程分段处理计算 prime_table
+        - Android Zygote Process，完成 “冷启动”
+    - 并行搜索
+        - Depth-first search
+    - 沙箱隔离
+        - 定期做一个 checkpoint，如果程序 crash 了就从 checkpoint 恢复
+    
+    理解 fork
+    - fork() 会完整复制状态机，包括尚未 flush 的 stdio 缓冲区
+    - 接终端：stdout 是行缓冲
+    - 接管道：stdout 变成全缓冲
+2. execve()
+    唯一能够 “执行程序” 的系统调用
+    ```c
+    int execve(const char *filename,
+               char * const argv[], char * const envp[]);
+    ```
+    设置进程初始状态
+    - argc & argv: 命令行参数
+    - envp: 环境变量
+    - 程序被正确加载到内存
+
+    PATH 环境变量：可执行文件搜索路径
+3. _exit()
+    立即摧毁状态机，允许有一个返回值，可以被父进程获取
+    ```c
+    void _exit(int status);
+    ```
+
+    理解 exit
+    - exit() 是 libc 库函数，会调用 exit_group()，并执行 atexit() 注册的函数
+    - _exit() 也是 libc 库函数，会调用 exit_group()，但不会执行 atexit() 注册的函数
+    - syscall(SYS_exit, ) 直接执行系统调用 exit() ，不会执行任何清理工作
+
+#### 进程状态机
+```mermaid
+graph LR
+    Ready -- Scheduled --> Running
+    Running -- "I/O: initiate" --> Blocked
+    Running -- Descheduled --> Ready
+    Blocked -- "I/O: done" --> Ready
+```
+#### 重定向输出 >
+当用 > 重定向输出时，shell 会创建一个子进程，关闭 stdout，打开一个文件描述符，指向文件，按照 Unix 总是分配最小的文件描述符的原则，这个文件描述符会被分配到 1，指向文件。
+
+### 进程的地址空间
+- 隔离与保护：不同进程的地址空间相互独立
+- 便于管理与扩展：程序以为自己占有一大片连续内存 (实际按需分配)
+- 支持共享在隔离的前提下，允许有限的共享
+
+#### 进程 execve 后的进程地址空间
+- ABI 中规定的 initial state (System V ABI)
+    - Section 3.4: “Process Initialization”
+    - 只规定了部分寄存器和栈 (argv 和 envp 中的字符串保存在栈中)
+- Binary 中指定的 PT_LOAD 段
+    - 内存是分成 “一段一段” 的
+    - 每一段有访问权限 (rwx)
+
+#### 地址空间管理 API
+UNIX: brk/sbrk
+> Note that you should never directly call either brk or sbrk. They
+are used by the memory-allocation library; if you try to use them, you
+will likely make something go (horribly) wrong.
+
+Memory Map 系统调用
+```c
+// 映射
+void *mmap(void *addr, size_t length, int prot, int flags,
+           int fd, off_t offset);
+int munmap(void *addr, size_t length);
+
+// 修改映射权限
+int mprotect(void *addr, size_t length, int prot);
+```
+- 瞬间完成内存分配，mmap/munmap 为 malloc/free 提供了机制
+- 映射大文件、只访问其中的一小部分
+
+
+所有和内存相关的功能，底层几乎都是 mmap
+- 内存分配
+    - 进程内的内存分配器会问操作系统要大内存
+    - sbrk/brk 被保留，但操作系统内用 mmap 实现
+    - 再切小了分配给 malloc()
+- Memory-mapped I/O
+    - /dev/gpiomem
+- 进程间共享内存
+    - shm_open() 可以返回一个文件，mmap 实现进程共享内存
+- Just-in-time 生成代码
+    - mprotect 可以改变 mmaped region 的权限 (rwx)
+
+### 操作系统对象
+读取网络请求、写入文件、和其他进程通信都是访问操作系统对象\
+操作系统设计是为了满足程序员的需求，提供一套简单、稳定的通用 API
+
+#### UNIX: Everything is a file
+一个普适的抽象\
+任何数据流/数组都可以抽象为**文件**，用目录来管理名字
+
+FHS (Filesystem Hierarchy Standard) 规定了 Linux 系统的目录结构
+
+Keep It Simple, Stupid (KISS)
+
+#### 文件描述符：访问操作系统对象的“指针”
+- 0: stdin, 1: stdout, 2: stderr, ...
+- open() 总是分配最小的未使用的描述符
+
+#### 复杂性
+API 直接会相互影响
+- fork() 会复制文件描述符表
+- 实际上会导致系统设计复杂化
+
+Windows Handle API
+- 默认 handle 不继承
+- “最小权限原则”
+
+#### 管道
+mkfifo 创建一个 FIFO 文件，两个进程可以通过它通信\
+int pipe(int fildes[2]); 创建一个仅进程内部可见的管道
+
+### C 标准库
+构建应用生态：组合、复用、分层
+#### 标准化
+- ISO C, 稳定可靠，移植性
+- POSIX C 的子集 (unistd.h, ...)
+- 有些标准库功能依赖操作系统 (putchar, exit)
+- Freestanding: 不依赖任何 Host OS 功能
+#### 机器/平台相关
+- stddef.h, float.h, limits.h, inttypes.h, stdint.h
+- offsetof(T, m): 结构体成员 m 在结构体 T 中的偏移量
+- PRIdPTR, PRIuPTR: 可移植的 printf 格式化输出
+#### ABI 相关的参数解析
+- stdarg.h
+    - 寄存器传参，栈传参，实现复杂
+#### 库函数
+- string.h: memcpy, memmove, strcpy, ...
+- stdlib.h: rand, atoi, qsort, ...
+- math.h
+#### error
+- perror: 打印 errno 对应的错误信息，有语言本地化
+#### Debug Info
+- 可以用 .symtab 做调试信息
+- gcc -gstabs 生成 .stab 符号表，gdb 可以用它调试
+- DWARF：bytecode 指令集，图灵完备，也可用于实现 C++ 异常的 stack unwinding
+- trace/profiler
+- crash dump
+- AddressSanitizer 诊断报告
+#### 可变参数
+- stdarg.h
+- C 语言的可变参数是通过栈实现的，编译器会在函数调用时把参数压入栈中，函数内部通过 va_list、va_start、va_arg、va_end 等宏来访问这些参数。
+#### setjmp/longjmp
+- setjmp 用于保存当前的执行环境（包括寄存器状态、栈指针等）
+- longjmp 用于跳转回之前保存的执行环境，并恢复到那个状态
+- 程序是一个状态机
+#### gettimeofday
+没有使用系统调用，而是进入 vDSO, 这是一个内核提供的共享库，允许用户空间直接访问一些内核功能，从而避免了系统调用的开销。
+#### malloc/free
+- 操作系统本身不支持分配一小段内存
+- 本质是 mmap/sbrk 的封装
+- 对于小内存分配，虚拟内存会用 brk/sbrk 分配堆区（低地址）；对于大内存分配，会直接 mmap 分配内存映射区域（高地址）。malloc 分配堆区的说法其实是不准确的
+- 小对象：字符串、临时对象等；生存周期可长可短
+- 中对象：容器、复杂的对象；更长的生存周期
+- 大对象：巨大的容器、分配器；很长的生存周期
+
+> Premature optimization is the root of all evil.\
+> ——D. E. Knuth
+
+#### malloc, Fast and Slow
+- Fast path (System I)
+    - 性能极好、覆盖大部分情况
+    - 但有小概率会失败 (fall back to slow path)
+- Slow path (System II)
+    - 不在乎那么快
+    - 但把困难的事情做好
+#### 空间换简洁
+- 分配: Segregated Lists
+    - 每个 slab 里的每个对象都一样大
+    - fast path → 立即在线程本地分配完成
+    - slow path → mmap()
+- 回收: O(1)
+
+### 链接和加载
+#### 静态链接
+UNIX a.out "assembler output"
+```c
+struct exec {
+    uint32_t  a_midmag;  // Machine ID & Magic
+    uint32_t  a_text;    // Text segment size
+    uint32_t  a_data;    // Data segment size
+    uint32_t  a_bss;     // BSS segment size
+    uint32_t  a_syms;    // Symbol table size
+    uint32_t  a_entry;   // Entry point
+    uint32_t  a_trsize;  // Text reloc table size
+    uint32_t  a_drsize;  // Data reloc table size
+};
+```
+- 没有 offset
+- 不支持动态链接、调试信息、内存对齐、thread-local ...
+#### Linux 加载器
+execve() 会调用内核的加载器，加载 ELF 文件到内存中，并设置进程的初始状态
+
+Shebang (#!) 是 Linux 加载器的一个特性，允许脚本文件指定解释器。例如，`#!/bin/bash` 表示该脚本应由 Bash 解释器执行。
+- POSIX 定义缺陷：解释器参数是作为一个整体传递的，在其他平台上可能会被拆分成多个参数，导致兼容性问题
+- Linux 优先使用 #! 作为解释器，再解析 ELF
+#### 动态链接
+- 动态链接器 (Dynamic Linker) 负责在程序运行时加载共享库
+- 多个程序可以共享同一个共享库的代码段，从而节省内存
+- 动态链接库是位置无关代码
+- 程序的第一条指令是 _dlstart，负责调用动态链接器，加载共享库，并解析符号表，再跳转到 _start
+- 'ld-linux.so' 硬编码在 ELF 文件的 INTERP 中
+- glibc 是用 ld-linux.so 调用 mmap 加载共享库的
+#### man 8 ld.so
+- LD_LIBRARY_PATH: 指定共享库搜索路径
+- LD_DEBUG=libs; ldd
+- LD_BIND_NOW
+- LD_SHOW_AUXV
+- LD_PRELOAD
+    - ld.so: 谁先被加载并首次满足未定义符号，谁就被调用
+    - 可以用来替换系统调用的实现，或者在程序启动时注入自定义的库函数
+#### 共享库的地址
+- 编译/链接时候地址是未知的，但是跳转/访存指令需要一个确定的地址
+- 函数调用跳转到 PLT (Procedure Linkage Table) 的入口，PLT 里有一个跳转到 GOT (Global Offset Table) 的指令，GOT 里存放了函数的实际地址
+- 全局变量访问也是通过 GOT 来实现的，GOT 里存放了全局变量的实际地址
+
+#### 第一个进程
+- Linux 内核启动后，会执行 execeve 启动第一个进程，但是执行 execve 需要文件系统的路径
+- 初始状态，会加载 initramfs (initial RAM filesystem)，这是一个临时的根文件系统，包含了启动所需的最小文件和程序
+    - 加载必要的驱动程序
+    - 挂载必要的根文件系统
+    - 将根文件系统和控制权转移给另一个程序
+- `int pivot_root(const char *new_root, const char *put_old);`\
+切换到新的根文件系统 new_root，并将旧的根文件系统挂载到 put_old 目录下
+- 然后执行 `/sbin/init`，这是第一个用户空间进程，负责启动系统的其他进程和服务，在现代 Linux 系统中，通常是 systemd
+
+### 应用生态
+应用生态成就了操作系统的繁荣
+#### Debian 包管理
+deb 包是一个 tar 压缩包，里面包含了程序的二进制文件、配置文件、依赖关系等信息。
+- control.tar.xz
+    - control 文件：包含包的元数据，如包名、版本、依赖关系等
+- data.tar.xz
+    - 实际的文件
+- Preinstall & Unpack → Configure → Triggers → Postinstall
+
+## 并发
+### 多处理器编程
+#### motivation
+- syscall 执行期间，CPU 可能会被阻塞，导致 CPU 空闲
+- 多处理器系统共享内存
+#### 并发 & 并行
+- 并发 (Concurrency): 多个任务在同一时间段内交替执行
+- 并行 (Parallelism): 多个任务在同一时间点上同时执行
+#### 困难
+- 不确定性 (Non-determinism): 由于任务的执行顺序不确定，可能会导致不同的结果
+- 非顺序性 (Out-of-order)
+    - 编译器优化: 编译器可能会对代码进行优化，改变指令的顺序，导致程序的执行顺序与代码顺序不一致
+    - CPU 指令乱序执行: CPU 为了提高性能，可能会对指令进行乱序执行，导致程序的执行顺序与代码顺序不一致 (处理器也可以看作是编译器)
+- 宽松内存模型 (Weak Memory Model): 不同的 CPU 核心可能会有不同的缓存，导致不同核心看到的内存状态不一致
+    - store 写入 cache，再同步给其他核心，可能会有延迟
+    - 允许 load 读到 cache 中的旧值，导致不同核心看到的内存状态不一致
+
+> 在某种意义上，编程语言的内存模型比最宽松的硬件内存模型弱，因为编译器优化可能会改变代码的执行顺序，导致程序的执行顺序与代码顺序不一致。----Russ Cox
+#### 控制编译器优化
+- 插入不可优化的内存屏障 (Memory Barrier)
+    ```c
+    asm volatile("" ::: "memory");
+    ```
+- 标记变量 load/store 为 volatile，禁止编译器优化
+    ```c
+    volatile int x;
+    ```
+### 并发控制：互斥
+操作系统的系统调用是共享内存的，因此需要并发控制
+#### 单处理器系统：关闭中断
+关闭中断处理使当前代码无法被中断，从而保证了当前代码的原子性。\
+缺点：关闭中断会导致系统无法响应其他中断
+#### 多处理器系统：锁
+- 互斥锁 (Mutex): 通过阻塞的方式获取锁
+    - lock (acquire): 有 🔑，就拿走继续；没有 🔑，需要等待
+    - unlock (release): 把 🔑 放回桌上
+- 自旋锁 (Spinlock): 通过忙等待的方式获取锁
+    - __atomic_exchange_n()
+#### “一把大锁保平安”
+Linux 内核早期使用 Big Kernel Lock (BKL) 来保护整个内核的并发访问，后来逐渐被细粒度锁取代，以提高并发性能
+#### 线程的必要性
+- 悲观的 Amdahl’s Law
+    - 如果你有 1/k 的代码是不能并行的，那么 $$T_∞ > \frac{T_1}{k}$$
+- 乐观的 Gustafson’s Law
+    - 能并行的并行计算总是能实现的 $$T_p < T_∞ + \frac{T_1}{p}$$
+- 局部性原理 (Locality Principle)
+#### Dekker’s algorithm
+A process P can enter the critical section if the other does not want to enter, otherwise it may enter only if it is its turn.
+```
+status[i] = competing;
+while status[other] == competing do
+    if turn == other then
+        status[i] = out;
+        wait until turn == i;
+        status[i] = competing;
+    end if
+end while
+// 临界区
+turn = other;
+status[i] = out;
+```
+#### Peterson’s Algorithm
+A process P can enter the critical section if the other does not want to enter, or it has indicated its desire to enter and has given the other process the turn.
+```
+flag[i] = true;
+turn = j;
+while (flag[j] && turn == j);
+// 临界区
+flag[i] = false;
+```
+#### Peterson 算法的实现
+假设
+- Load/store 指令是瞬间完成且生效的
+- 指令按照程序书写顺序执行
+
+但是，现代 CPU 不满足这些假设，实际上是错误的
+
+解决方法
+- Compiler barrier (编译优化屏障)
+    - asm volatile(“”: : :”memory”); 或是 volatile 变量
+- Memory barrier (内存屏障)
+    - x86: mfence
+    - ARM: dmb ish
+    - RISC-V: fence rw, rw
+- __sync_synchronize() = Memory barrier + Compiler barrier
+- **实现硬件原子操作**
+    - x86: Bus Lock (locked instruction)
+    - RISC-V: LR/SC & A 扩展
+    - arm: ldxr/stxr, stadd (store add) 指令
+#### 自旋锁：性能问题
+- 除了获得锁的线程，其他处理器上的线程都在空转
+- 应用程序不能关中断，持有自旋锁的线程被切换导致 100% 的资源浪费
+
+#### 操作系统实现锁
+- syscall(SYSCALL_acquire, &lk);
+    - 试图获得 lk，但如果失败，就切换到其他线程
+- syscall(SYSCALL_release, &lk);
+    - 释放 lk，如果有等待锁的线程就唤醒
+- 剩下的都是内核工作
+    - 关中断 + 自旋 （自旋锁只用来保护操作系统中非常短的代码块）
+    - 成功获得锁 → 返回
+    - 获得失败 → 设置线程为“不可执行”并切换
+
+##### 系统调用：futex
+- fast (user-space only) & slow (kernel) path
+
+性能的衡量在于定量研究
+#### 并发数据结构
+- approximate counter
+- concurrent linked list
+- concurrent hash table
+- concurrent queue
+
+### 并发控制：同步
+达到一个全局的一致状态，保证数据的正确性\
+确立 Happens-Before 关系，保证数据的可见性
+#### 条件变量
+条件变量是一个显式的队列，线程可以在执行状态不符合预期时将自己放入该队列；当其他线程改变该状态时，它可以唤醒其中一个（或多个）等待的线程，从而允许它们继续
+- cond_wait: 释放锁，同时立即等待 (原子操作，否则会出现丢失唤醒)
+- cond_wait 等待的线程，通过 signal(&cv) 或 broadcast(&cv) 唤醒
+```c
+// 线程 1
+mutex_lock(&lk);
+// 修改可能使 sync_cond() 成立的共享状态
+cond_broadcast(&cv);    // 唤醒等待的线程
+mutex_unlock(&lk);  // Release
+
+// 线程 2
+mutex_lock(&lk);  // Acquire
+while (!sync_cond()) {    // 条件不成立时进入等待
+    cond_wait(&cv, &lk);  // 等待并自动释放 lk, 被唤醒时重新获得 lk
+}
+// ... 执行后续操作
+mutex_unlock(&lk);
+```
+关键：理解同步的条件
+#### 生产者-消费者问题/Bounded Buffer Problem
+99% 的实际并发问题都可以用生产者-消费者解决
+- Master-slave (scheduler–worker) 模式
+
+Producer 和 Consumer 共享一个缓冲区
+- Producer (生产数据)：如果缓冲区有空位，放入；否则等待
+- Consumer (消费数据)：如果缓冲区有数据，取走；否则等待
+- 同步：同一个 object 的生产必须 happens-before 消费
+#### 计算图模型
+G(V, E): 有向无环的 Dependency Graph
+- 计算任务在节点上
+- 边 (u, v) 表示 v 的计算要用到 u 产生的值
+
+这是一个非常基础的模型，几乎总是可以用这个视角去理解并行计算\
+如果节点 “独立计算时间” 足够长，算法就是可高效并行的\
+计算图也可以是动态的，一边计算，一边产生新的节点
+
+实现
+- 先进行拓扑排序，再按每一层的顺序执行
+- 同步
+    - 为每个计算节点设置一个线程和条件变量 (资源浪费)
+    - 实现一个任务的调度器 (Executor Pool)
+
+同步条件
+- 为每个计算节点分配线程
+    - 对于 u → v，T_u: 完成后为 T_v 生产一份；T_v: 消费 n_predecessors 份后才能继续
+    - T_worker: 生产 ready，消费 job；T_scheduler: 消费 ready，生产 job
+
+#### 信号量
+pthread_mutex 非持有者解锁是 undefined behavior\
+我们需要一种能表达“信号”的机制
+
+信号量是带一个计数器的锁
+```c
+void P(sem_t *sem) {  // Acquire
+    mutex_lock(&sem->lk);
+    while (!(sem->count > 0)) {
+        cond_wait(&sem->cv, &sem->lk);
+    }
+    sem->count--;  // 消耗一个 token (信号)
+    mutex_unlock(&sem->lk);
+}
+
+void V(sem_t *sem) {  // Release
+    mutex_lock(&sem->lk);
+    sem->count++;  // 创建一个 token (信号)
+    cond_broadcast(&sem->cv);
+    mutex_unlock(&sem->lk);
+}
+```
+#### 信号量：计算图
+- 为每条边 e: u → v 计数
+    - T_u: work(u); V(e); (做完任务放回 🔑)
+    - T_v: P(e); work(v); (需要 🔑 才能开始)
+- 为每个节点计数
+    - T_u: P(u); P(u); … work(u)
+    - T_v: P(v); P(v); … work(v)
+#### 信号量：生产者-消费者问题
+```c
+sem_t empty = SEM_INIT(depth);
+sem_t fill = SEM_INIT(0);
+
+void T_produce() { P(&empty); printf("("); V(&fill); }
+void T_consume() { P(&fill); printf(")"); V(&empty); }
+```
+信号量
+- 干净、优雅，完美地解决了生产者-消费者问题
+- 但 “count” 不总是能很好地代表同步条件
+
+条件变量
+- 万能：适用于任何同步条件
+- 丑陋：代码总感里有什么脏东西 (spin loop)
+
+信号量不总是 “优雅”\
+“互斥锁是信号量的特例”\
+“信号量是互斥锁的扩展”
+
+很多问题都可以转化为生产者-消费者问题，比如哲学家问题引入“调度线程” T_waiter
+```c
+void T_philosopher(int tid) {
+    while (1) {
+        send_message_to_waiter();
+        P(&can_proceed[tid]);
+    }
+}
+```
+#### 读写锁
+- 读写互斥
+- 写写互斥
+- 读读并发
+```c
+typedef struct _rwlock_t {
+    sem_t lock;         // binary semaphore (basic lock)
+    sem_t writelock;    // allow ONE writer/MANY readers
+    int readers;        // #readers in critical section
+} rwlock_t;
+
+void rwlock_init(rwlock_t *rw) {
+    rw->readers = 0;
+    sem_init(&rw->lock, 0, 1);
+    sem_init(&rw->writelock, 0, 1);
+}
+void rwlock_acquire_readlock(rwlock_t *rw) {
+    sem_wait(&rw->lock);
+    rw->readers++;
+    if (rw->readers == 1) // first reader gets writelock
+        sem_wait(&rw->writelock);
+    sem_post(&rw->lock);
+}
+
+void rwlock_release_readlock(rwlock_t *rw) {
+    sem_wait(&rw->lock);
+    rw->readers--;
+    if (rw->readers == 0) // last reader lets it go
+        sem_post(&rw->writelock);
+    sem_post(&rw->lock);
+}
+
+void rwlock_acquire_writelock(rwlock_t *rw) {
+    sem_wait(&rw->writelock);
+}
+
+void rwlock_release_writelock(rwlock_t *rw) {
+    sem_post(&rw->writelock);
+}
+```
+
+> TIP: Simple and dumb can be better (Hill’s Law)
+
+#### Read-Copy-Update（RCU）
+一种用于实现读多写少场景下的并发控制机制\
+核心思想是：读者无锁读取，写者复制修改，替换指针，延迟释放旧数据。
+
+### 并发：Bug
+#### 死锁 (Deadlock)
+> A deadlock is a state in which each member of a group is waiting for another member, including itself, to take action.
+- AA-Deadlock
+    - 同一个线程，pthread_mutex_lock 同一个锁两次
+- ABBA-Deadlock
+    - 两个线程，pthread_mutex_lock 两个锁，顺序不同
+#### 死锁：必要条件
+打破任何一个条件，就不会发生死锁
+1. Mutual-exclusion - 一把钥匙只能被一个人拿到，拿到钥匙才能继续
+    - 重构代码，加入调度线程
+    - 构建无锁数据结构
+2. Wait-for - 拿到钥匙的人还想要更多的钥匙
+    - 一把大锁保平安，在一个大锁里完成所有操作
+3. No-preemption - 不能抢别人的钥匙
+    - 回滚持有锁线程执行过的操作
+    - `pthread_mutex_trylock()`，但是可能会导致 livelock
+4. Circular-chain - 形成循环等待
+    - Lock ordering
+
+> TIP: Don't always do it perfectly (Tom West's Law)\
+> 可以允许死锁偶尔发生，但要保证死锁可检测，系统能恢复
+#### Lock ordering
+任意时刻系统中的锁都是有限的
+- 给所有锁编号，严格按照从小到大的顺序获得锁
+- 用 &mutex 作为锁的编号最方便
+#### Transactional Memory
+*目前仍作为 GCC 扩展的实验性功能
+`__transaction_atomic`
+#### 数据竞争 (Data Race)
+不同的线程同时访问同一内存，且至少有一个是写
+- C/C++: data race 是 undefined behavior
+- Java Memory Model：试图 “定义” race 的可能行为
+
+情况
+- 上错了锁
+- 忘记上锁
+
+Thread Sanitizer (TSan) 是一个动态检测工具，能够在运行时检测数据竞争和死锁等并发问题。它通过在编译时插入额外的检查代码来监控线程之间的内存访问，从而帮助开发者发现潜在的并发问题。
+
+97% 的非死锁并发 bug 都是原子性或顺序错误
+#### 原子性违反 (Atomicity Violation)
+> “The desired serializability among multiple memory accesses is violated (i.e. a code region is intended to be atomic, but the atomicity is not enforced during execution).
+
+“ABA”: 代码被别人 “强势插入”
+#### 顺序违反 (Order Violation)
+“BA”: 事件未按预定的顺序发生
+
+#### 多线程 fork()
+新进程只会复制调用 fork() 的线程的状态，其他线程不会被复制
+- 复制的线程会继承父进程的锁状态，可能导致死锁
+- 最好 fork() 后立即 execve()
+
+### 并行算法
+好的 scalability：性能随 CPU/线程/机器增加而增长
+
+scale up (单机) & scale out (多机)：分解问题
+- 只要并行部分所需时间 >> 互斥的时间，就可以 scale
+- 例子：计算图 (DAG) 的深度 v.s. 宽度
+#### 高性能计算 (HPC)
+源自数值密集型科学计算任务
+- 物理系统模拟
+- 矿厂 (proof-of-work)
+- AI 推理
+
+高性能计算程序
+- 可以大规模并行
+- 甚至是 “Embarrassingly parallel” (几乎不需要同步/通信)
+    - Tree search (fork-based dfs)
+    - Monte Carlo 模拟
+    - 视频逐帧处理
+
+科学计算的并行编程
+- MPI: message passing libraries
+- OpenMP: multi-platform shared-memory programming (C/C++ and Fortran)
+- 真正困难的地方：网络通信、功耗管理、稳定性和容错、软件和工具链
+
+### 并行数据结构
+一切都可以建模成计算图 (DAG) 的问题\
+我们可以不需要完全严格的顺序执行
+- 对于 sum++ ，我们可以创建一个 sum_local
+```c
+int sum_local[MAX_TID];
+void T_sum(int tid) {
+    if (++sum_local[tid] == 100) {
+        mutex_lock(&lk);
+        sum += sum_local[tid];  // “Sloppy” counter
+        mutex_unlock(&lk);
+        sum_local[tid] = 0;
+    }
+}
+```
+#### Thread-local
+`thread_local` keyword (C++11/C23)
+- 每个线程会 “自动” 得到一份拷贝
+- 允许是任何类型 (也可以赋初值)
+```c
+thread_local int sum_local;
+
+void T_sum() {
+    thread_local int t;  // Compile error
+    sum_local++;  // 每个线程有自己的 sum_local
+}
+```
+
+Thread-local Storage 实现
+- “.tdata, .tbss” 段 (thread-local 的大小是编译时确定的)
+- x86-64: 用 fs 段寄存器做 TLS base
+- thread_local 在每次线程创建时赋值
+```c
+int x;  // x(%rip)
+
+void foo() {
+    int y;  // y(%rsp)
+}
+
+thread_local int z;  // z(%fs)
+```
+
+#### 数据结构
+- array, list, tree, graph 等数据结构天生是 “分散” 存储的，具有访问的局部性
+    - 读写数据结构的一部分未必需要锁住整个数据结构
+- Key Idea: 锁的拆分
+    - 能用原子指令就不用锁
+    - Reader/writer lock (pthread_rwlock_t)
+    - Segment/element-wise lock
+
+例子：Hash Table
+- 一种高效的 key-value 数据结构
+    - hash(key) 将转化为数组下标，在该位置存储对应的 value
+    - 可以做 per-bucket lock (甚至是读写锁)
+- Open Addressing 的麻烦
+    - 并发的查找、删除、遍历
+    - Resize: 会 “摧毁” 已有的数组
+
+### 异步编程模型
+#### 线程需要占用资源
+- 内存
+- 分配的 “资源”，例如 pid
+- 线程的切换需要进入操作系统内核代码
+
+启动线程的代价远大于函数调用\
+所以，我们需要一种更轻量级的并行方式
+#### Approach I: 轻量化线程
+放弃中断驱动的上下文切换，在用户空间实现 “线程”
+- 让 spawn 和 join 的代价接近函数调用
+- Coroutine, goroutine, …
+#### 协程：缺陷与解决方法
+- 操作系统里只有一个执行流，read/write 会阻塞整个进程
+- mutex_lock + yield = AA 型死锁
+
+解决：异步 I/O
+- open: O_NONBLOCK
+    - read 可能返回 nread 或者 EAGAIN，然后 yield，再等到有数据可读时再继续 read
+- epoll, eventfd, timerfd, io_uring, …
+#### Go
+我们希望编译器可以自动将同步代码转换为异步代码，这就是 goroutines 的设计理念
+- 每个 CPU 上有一个 Go Worker Thread (协程调度器)
+- 像线程一样使用，像协程一样轻量
+> Do not communicate by sharing memory; instead, share memory by communicating. ——Effective Go
+
+UNIX 时代的并发编程机制：管道\
+Go 语言的 channel 就是管道的抽象，允许在不同的 goroutine 之间传递数据
+
+#### Approach II: 异步编程
+- 改变程序的执行模型，允许描述并行/并发的计算图
+- Promise/Future, async/await, …
+
+#### JavaScript
+设计的有点糟糕
+借鉴了函数式编程的思想，使用事件循环 (Event Loop) 来处理异步 I/O
+
+Web 1.0 到 Web 2.0
+- Asynchronous JavaScript and XML (XMLHttpRequest; ~1999)
+    - 可以随时请求后端，更新 DOMTree: MVC 分离架构
+    - 任何 “应用” 可以做的，网页也都可以做了
+- jQuery $ (2006): A DOM Query Language (编程抽象)
+    - 现代浏览器：$ 就是 document.querySelector
+
+HTML + CSS 构建应用的方便程度超过传统 GUI 编程
+
+我们需要一个更简单的描述计算图的模型
+#### Event-based concurrency
+- 禁止任何计算节点并行
+- 没有任何 Blocking I/O
+
+异步回调 (callback)
+- 在事件完成后排队调用 (success, error)
+- 创建了计算图中的动态节点
+
+“Callback hell (回调地狱)”
+```javascript
+// A → B → C 的顺序逻辑硬生生被拆分成了几个部分，极容易写出屎山代码
+$.ajax({
+    url: '/api/user',
+    success: function(user) {
+        $.ajax({
+            url: `/api/user/${user.id}/friends`,
+            success: function(friends) {
+                $.ajax({url: `/api/friend/${friends[0].id}`, ...});
+            },
+            error: function(err) { ... }
+        });
+    }, ...
+});
+```
+
+`Promise` 是对回调的封装，允许链式调用，避免了回调地狱
+```javascript
+useEffect(() => {
+    fetch(`/api/localhost/?action=demo&path=${path}`)
+        .then(response => response.json())
+        .then(fetchedData => setData(fetchedData))
+}, []);
+
+Promise.all([
+    fetch(...).then(...), fetch(...).then(...), ...
+]).then(
+    // succeeded
+).catch(
+    // error handling (catches exceptions in the fetch)
+)
+```
+> Promise.all() 会立即返回一个新的 Promise
+
+#### Async/Await 语法糖
+同步的写法表达异步的流程，剩下交给编译器
+- async function f() → function f() { return new Promise(…) }
+- await f() → return Promise.resolve(f()).then(…)
+```javascript
+async function fetchData(token) {
+  const response = await fetch(
+    `/api/submissions/?token={token}`
+  )
+  return response.json()
+}
+await Promise.all([fetchData('1234'), fetchData('5678')])
+```
+
+操作系统上的另一个应用生态
+- Angular, React, Vue, Bootstrap, Tailwindcs
+- Express, Next, Nest
+- Electron 和 vscode; Ink 和 Claude code; React Native
+- asm.js, WebAssembly
+- Mermaid, TensorFlow, Three, …
+
+### CPU、GPU 和 SIMT 编程模型
+#### CPU 并行编程
+现代处理器和 Instruction-level Parallelism
+- 逻辑门天然是并行的，可以一个周期译码多条指令、分析数据依赖
+- 完全可以在 CPU 里内置动态数据流分析，实现乱序发射、按序提交
+    - BogoMips (/proc/cpuinfo)，每秒执行 while (loops--) cpu_relax(); 的次数
+        > BogoMips is a value that can be used to verify whether the processor in question is in the proper range of similar processors
+
+CPU 跑得越快，浪费得越多，每一个门电路的翻转都会产生热量，CPU 里的 “编译器” (指令调度) 会消耗巨量的能量\
+热功耗：
+$$P=CV^2f$$
+如何压榨出更多的 performance/watt？
+#### Approach I: 让一条指令能处理更多的数据
+- SIMD (Single Instruction, Multiple Data)\
+一条指令可以同时处理多个数据
+    - 把一个大操作数分成几个小操作数
+        - 例子：把 64-bit 当成 4 个 integers，做 pairwise 乘法
+    - 增加一些 “超大” 的寄存器
+        - 64-bit “mm” 寄存器
+
+寄存器越长，调度代价就被摊薄得越多
+- MMX -> SSE → AVX → AVX-512
+    - 直到碰上内存墙/功耗墙 (AVX-512 已经达到热密度极限)
+- 支持更多的数据类型：int8/16/32 → float32 → float64
+- 支持更多运算 (三操作数模式)
+    - Shuffle: c[i] = a[b[i]]
+    - FMA: a * b + c，一条指令完成
+
+问题：SIMD 指令依然是在 CPU 里调度的，会抢缓存、抢功耗
+- 失败的尝试：Very Long Instruction Word (VLIW)
+    - 完全消灭动态流水线，编译器扛下所有，生成静态指令调度
+- 成功的尝试：简化指令调度，改成横向扩展
+#### Approach II: 用更多更简单的处理器
+- 多处理器系统、异构多处理器系统（大小核）
+    - 同等面积，处理器越简单，数量越多
+
+#### GPU 并行编程
+过去的游戏是以 tile 为基本单位渲染
+- Tile ROM + Tile Map + Attribute Tables
+- 背景卷轴 + sprite
+
+Sprite = (x, y, tile, attr)
+
+PPU (Picture Processing Unit) 是一个专门的图形处理器，负责渲染图像到屏幕上，其完全用电路实现 (fixed-function GPU)
+
+PPU 到 2D 图形渲染管线
+- 动态拼凑图片 (texture) 实现场景的绘制
+- 依然是 “固定循环”，执行完全相同的逻辑
+
+2D 到 3D 图形渲染管线
+- Vertex, Face, Texture, Material, Light, Camera
+    - 三角剖分定理
+    - 3D 空间中的各种变换 (translation, camera projection, …)，在 4D 齐次坐标下是线性的
+- 需要加入深度信息
+
+#### 从数据结构到编程语言
+可编程的 shader 让 GPU 变成了一个通用计算平台
+- Vertex shader: 可以编程修改几何形状
+    - 实现 “扭曲”，例如水面的波纹、毛发的摆动
+- Fragment (Pixel) shader: 可以编程修改颜色
+    - Normal mapping (法线贴图)：远距离观察时 “骗过” 光照计算
+#### GPGPU, SIMT and CUDA
+“Fast matrix multiplies using graphics hardware”
+- 外积分解: $AB = \sum_{k} A_{,k} B_{k,}$
+- 试图把各种计算问题转换为 “图像” 的计算
+- 开辟了 GPU 的通用计算时代
+
+Shader Program
+```c
+__device__ int *screen;
+
+void T_kernel(int row, int col) {
+    int color = f(row, col);  // 任意 C/C++ 代码
+    screen[row * 1920 + col] = color;
+}
+
+for (int row = 0; row < 1080; ++row) {
+    for (int col = 0; col < 1920; ++col) {
+        spawn(T_kernel, row, col);
+    }
+}
+```
+在 GPU 上启动一大堆线程，并行执行，允许访问 shared memory，这就是 CUDA 的基本模型
+
+SIMT 模型\
+可以让一个 “CPU” 管理若干 T_kernel，并且只有一个 PC\
+“Thread warp” 线程束\
+Nvidia Stream Multiprocessor 可以保存多个 (32) warps，load/store stall 可以换另一个
+
+CUDA 程序很难写
+```c
+map[row * 1920 + col] = t;
+map[row + col * 1080] = t; // 等价的写法，可能导致性能大幅下降
+```
+
+### 数据中心
+> Datacenter: “A network of computing and storage resources that enable the delivery of shared applications and data.” (CISCO)
+
+数据中心：一个产业链
+
+分布式数据处理
+- 实时的 “小数据处理” (CRUD)
+    - 订单事务、内容分发、用户鉴权、弹幕、计费、视频串流...
+- 半离线的 “中数据处理”
+    - 周期记账、备份、数据看板...
+- 离线的 “大数据处理”
+    - 内容索引、数据挖掘、流量分析...
+#### The C10K Problem
+- 催生了 epoll、Nginx、事件驱动架构，和之前的并发编程模型 (goroutine, etc.)
+#### 并发编程
+- 高吞吐 (QPS) & 低延迟
+- 高可靠性
+#### CAP Theorem
+- 数据保持一致 (Consistency)、服务时刻可用 (Availability)、容忍机器离线 (Partition tolerance) 不可兼得
+
+解决方法：重新设计系统接口
+- 必须把计算分发到机器/线程 (把计算带到数据)
+- 支持透明的网络延迟/容错 (重算)
+
+分布式系统编程
+- 足够好的存储系统 + 描述数据上的计算图 = Serverless Computing
+- Function as a Service: Write Once, Planet Scale
+
+### 历史总是惊人地相似
+- 底层：加速器 (GPU)、底层编程模型 (CUDA)，库函数 (cuBLAS, DeepGEMM, NCCL)
+- 中层：编译器 (FlashAttention, Triton)、训练 (Megatron)、推理 (vLLM) 框架
+- 开发者生态：训练 (PyTorch, TensorFlow)、模型分发 (HuggingFace), …
+- 用户接口：ollama, OpenWebUI, …
+- 应用：Claude Code, OpenClaw, Manvus, NotebookLM, …
+
+## 持久化
+### I/O 设备
+“计算” 和 “物理世界” 之间的桥梁\
+I/O 设备 = 一个能与 CPU 交换数据的接口/控制器
+- 一些寄存器 (Status, Command, Data)
+    - 通过握手信号从线上读出/写入数据
+- 映射到内存地址 (Address Decoder)
+    - CPU 可以直接使用指令 (in/out/MMIO) 和设备交换数据
+    - 也可以向计算机发送中断
+#### 简单的 I/O 设备
+- GPIO (General Purpose I/O)
+    - Memory-mapped I/O 直接读取/写入电平信号
+- 串口 (UART) Universal Asynchronous Receiver/Transmitter
+- 键盘控制器
+    - IBM PC/AT 8042 PS/2 (Keyboard) Controller
+    - 6 根线：Data, Clock, VCC, GND, 两个预留
+- 磁盘控制器
+    - ATA (Advanced Technology Attachment)
+    - IDE 接口磁盘 (40pin data 的数据线 + 4pin 电源)
+#### 复杂的 I/O 设备
+任何能 input/output 的东西，都可以是 Canonical Device
+- 打印机：将字节流描述的文字/图形打印到纸张上
+    - PostScript: 一种描述页面布局的 DSL
+        - 类似于汇编语言 (由 “编译器”，如 latex，生成)
+        - PDF 是 PostScript 的 “改进版”
+        - “图形状态机”：路径构造、路径着色、文本渲染、外部对象
+    - 打印机 = “汇编语言解释器”
+        - PCL, PostScript, IPP (AirPrint) → 打印机机械动作
+- 摄像头 (WebCam)
+    - UVC (USB Video Class)
+    - 一个标准化的协议：枚举设备 → 协商格式/分辨率/帧率 → 传输开始 → 逐帧读取 MJPEG/H.264
+    - 所有摄像头都是 “免驱” 的
+#### 协处理器和总线
+打破 I/O 设备与内存之间的边界\
+允许设备访问计算机内的资源
+
+DMA: 一个专门执行 memcpy 的协处理器
+
+异构加速器：GPU 和 NPU
+- 可以执行 `<<< >>>` 中定义的 kernel
+- 但代码和数据都是由 CPU 送过去的 `(cudaMalloc, cudaMemcpy, …)`；送数据又是由 DMA 完成的；控制指令则是 canonical device model
+
+连接万千设备：总线\
+提供设备的注册和转发
+- 把收到的地址 (总线地址) 和数据转发到相应的设备上
+
+PCIe: 今天获得 “CPU 直连” 特殊待遇的标准设备
+- PC: “PCIe lanes”，CPU 负责内存一致性
+- ARM SoC: 内存、PCIe 都挂在高速总线上
+- 高速设备都是直插 PCIe 的：FPGA、显卡、网卡、NVMe、USB Bridge……
+
+基于 PCIe 物理层的 CXL (Compute Express Link)
+- CXL.io, CXL.cache, CXL.memory
+- CXL 3.0 允许设备直接共享内存
+    - “设备” 可以是任何东西：GPU, NPU, 甚至另一台计算机上的内存
+    - “Disaggregated Datacenter” (Memory hierarchy 发生了变化)
+#### 程序视角的 I/O
+操作系统设计者视角：程序不应该直接访问总线/设备寄存器
+##### Everything is a File
+File = 实现了文件操作的「Anything」
+```c
+struct file_operations {
+    struct module *owner;
+    loff_t (*llseek) (struct file *, loff_t, int);
+    ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+    ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+    ...
+}
+```
+把系统调用 “翻译” 成设备能听懂的数据
+##### ioctl
+file 解决了 “数据流” 的问题，但有些设备需要 “命令” 来控制\
+操作系统必须提供一个设备相关的接口
+> The ioctl() system call manipulates the underlying device parameters of special files. In particular, many operating characteristics of character special files (e.g., terminals) may be controlled with ioctl() requests. The argument fd must be an open file descriptor.
+
+“非数据” 的设备功能几乎全部依赖 ioctl -> 堆叠的 💩 山
+- 设备的复杂性是无法降低的
+
+GPU = 一个有自己内存的协处理器
+- 通过 mmap 把内存交给设备驱动/设备
+- 通过 ioctl 提交命令 (doorbell)
+
+Linux DRM (Direct Rendering Manager) 内核模块
+- libdrm: 用户态库，封装 ioctl
+- Mesa: 用户态 OpenGL/Vulkan 实现，通过 libdrm 提交渲染命令
+
+/dev/kvm: Linux 内核模块，允许用户态程序创建虚拟机
+- Full virtualization
+    - Binary translation
+    - Hardware-assisted
+- Paravirtualization
+
+### 存储设备
+#### 数据持久化：硬件
+持久化：一个能反复改写的状态
+
+磁带 (1D 存储设备)
+- 价格低 (比电路容易制造)、容量高、可靠性高 (适当封装)
+- 顺序读写勉强 (需要等待定位)、随机读写几乎完全不行
+- 冷数据的存档和备份；只需要顺序读 (写) 的场景：音频/视频
+
+磁鼓 (Magnetic Drum)
+- 1D → 1.5D (1D x n)
+- 用旋转的二维平面存储数据 (无法内卷，容量变小)
+- 读写延迟不会超过旋转周期 (随机读写速度大幅提升)
+
+磁盘
+- 1.5D → 2.5D (2D x n)
+- 价格低、容量高、可靠性高
+- 顺序读写：较高；随机读写：勉强
+- 计算机系统的主力数据存储
+- 性能
+    - 读写一个扇区，读写头需要到对应的磁道，转轴将盘片旋转到读写头的位置
+    - 通过缓存/调度等缓解，STF, SSTF, NBF, Elevator, SPTF
+    - 现在调度算法由磁盘控制器负责 (内置的 CPU)
+> TIP: IT ALWAYS DEPENDS (LIVNY’S LAW)
+
+软盘 (floppy disk)
+- 把读写头和盘片分开——实现数据移动
+- 价格低，容量低，可靠性低
+- 顺序读写：低；随机读写：低
+- 曾经软件的常用发行介质
+
+compact disk (CD)
+- 在反射平面上挖上粗糙的坑，激光扫过表面，就能读出坑的信息来
+- 容易复制，“压盘”
+- 价格奇低，容量中等，可靠性高
+- 顺序读：一般；随机读：低；很难写入 (CD/R & CD/RW)
+- 数字内容分发
+
+Random read + Append-only write = 任何数据结构\
+一个有趣的应用：Project Silica
+
+solid state drive (SSD)
+- SLC (Single Level Cell)
+- MLC (Multi Level Cell)
+- TLC (Triple Level Cell)
+- QLC (Quad Level Cell)
+
+闪存
+- 价格低，容量高，可靠性高
+- 极高，而且有极高的扩展性，容量越大，速度越快
+- > Tape is Dead, Disk is Tape, Flash is Disk, RAM Locality is King (Jim Gray, 2006)
+
+开启 “优盘” 时代
+
+Flash Memory 缺陷
+- 放电 (erase) 做不到 100% 放干净，放电数千/数万次以后，就好像是 “充电” 状态了 (Erase Saturation)
+    - QLC: 大约只有 1,000 次写入寿命
+
+解决：软件定义磁盘\
+SSD、优盘，甚至是 TF 卡里都藏了完整的计算机系统
+- FTL: Flash Translation Layer
+    - direct mapping
+    - log-structured
+    - page-based mapping (plus caching)
+    - block-based mapping
+    - hybrid mapping
+- “Wear Leveling”: 用软件使写入变得 “均匀” (虚拟内存)
+    - 维护一个 Logical-to-Physical Table (L2P Table)
+    - Random Read + Append-only Write = 任何数据结构
+
+优盘, SD 卡, SSD 都是 NAND Flash，但软件/硬件系统的复杂程度不同，效率/寿命也不同
+- 典型的 SSD：CPU, RAM, 缓存, store buffer, 操作系统 …
+- SD 卡/TF 卡标准没有规定必须内置 FTL，但实际上都有计算机系统
+- 设备 = 一组寄存器 → 设备可以 “伪造”
+#### 数据持久化：软件
+存储设备的抽象
+- Random Access 的代价：寻址
+    - Die → Plane → Block → Page
+- 减少寻址的代价：按块访问
+    - 存储设备 = 随机读写的 block array
+- Block devices
+    - 按块访问的字节序列 (可以直接 mmap 到进程的地址空间)
+    - 代价：读/写放大 (read/write amplifications)，现在 NVMe ZNS (Zoned Namespaces) 直接操纵 append-only 的 Zone
+
+Linux Bio\
+一个应用程序 “看不见” 的接口
+- 实现 `struct block_device_operations` 和 `struct request_queue`
+
+block device 抽象
+- `read_block(id)`
+- `write_block(id, data)`
+
+### 文件系统 API
+Abstract Data Type\
+也是一种“虚拟化”
+- 内存 → 虚拟内存；磁盘 → 虚拟磁盘 (字节序列 `vector<char>`)
+#### 目录树
+管理文件
+- 信息的局部性
+- 系统中的文件可以组织成层次索引结构
+
+树状分层索引
+```
+.
+└── 学习资料
+    ├── .
+    ├── ..
+    ├── .学习资料(隐藏)
+    ├── ……
+    └── 操作系统
+```
+隐藏 “.” 开头的文件不是操作系统的行为
+```c
+while ((entry = readdir(dir)) != NULL) {  // busybox/coreutils/ls.c
+    if (entry->d_name[0] == '.') {
+        if (!(option_mask32 & (OPT_a|OPT_A))) continue;
+        if (!(option_mask32 & OPT_a) && (!entry->d_name[1] || (entry->d_name[1] == '.' && !entry->d_name[2]))) continue;
+    }
+}
+```
+设备 = 目录树\
+每个设备、每个 partition 都是一个目录树
+- `/dev/nvme0n1p1` (Namespace 1, Partition 1), 优盘、网络 (WebDAV)
+
+Windows
+- 所有操作系统对象的根 `\`
+    - `\\`: Universal Naming Convention 路径 (网络)
+    - `\\server\share` → `\Device\LanmanRedirector\server\share`
+    -  `\` 不能 cd，但可以用 API 访问
+    ```c
+    HANDLE hDevice = CreateFile(
+    "\\\\.\\PhysicalDrive0", GENERIC_READ | GENERIC_WRITE,
+    FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ```
+- 盘符 (历史遗留问题): A:\, B:\, C:\, …
+    - 实际上是 \??\C:\ (\?? 是 per-user 的命名空间)
+    - Windows 为用户隐藏了巨量的复杂性
+
+最小 Linux 启动时，只有 initramfs 和 /dev/console
+- mount: 把块设备上的目录树 “放到” 目录中
+- util-linux 会检测文件系统，最终会调用 mount 系统调用
+
+挂载文件
+- 创建 loopback device
+- 设备驱动把设备的 read/write 翻译成文件的 read/write
+- `drivers/block/loop.c`
+- ioctl(3, LOOP_CTL_GET_FREE)\
+  ioctl(4, LOOP_SET_FD, 3)
+
+FHS (Filesystem Hierarchy Standard)
+> FHS enables software and user to predict the location of installed files and directories.
+#### 目录树 API
+增删改查
+- mkdir: 创建目录
+- rmdir: 删除目录
+- getdents: 读取目录
+```c
+int mkdirat(int dirfd, const char *pathname, mode_t mode);
+int unlinkat(int fd, const char *path, int flag);
+ssize_t getdents64(int fd, void *dirp, size_t count);
+```
+- 创建、打开：open, creat, opendir
+- 读取、写入：read, write, lseek, readdir
+- fork: reference count
+- 复制描述符：dup
+- 重命名：rename, renameat (atomic)
+- 获取元数据：stat, fstat
+
+大多数情况下，write 不会立刻写入磁盘，用 fsync() 来强制写入磁盘
+> Interestingly, this sequence does not guarantee everything that you might expect; in some cases, you also need to fsync() the directory that contains the file foo. Adding this step ensures not only that the file itself is on disk, but that the file, if newly created, also is durably a part of the directory. Not surprisingly, this type of detail is often overlooked, leading to many application-level bugs.
+
+mmap() 和持久化
+- 可以直接把文件映射到内存，读写就像访问内存一样
+- 将代码和数据映射到内存，允许直接执行代码
+- 保存程序的“快照”
+- Serverless computing: 直接把函数映射到内存，允许直接执行函数, FaaS, BaaS
+
+'Globbing'
+- glibc 提供了 glob() 函数，允许使用通配符匹配文件名
+
+硬链接 (Hard Link)：允许一个文件被多个目录引用
+- 文件系统实现的特性 (ls -i 查看)
+- 不能链接目录、不能跨文件系统
+- 删除文件的系统调用称为 “unlink”
+- 现在用 “万能” 的 unlinkat，也可以删除空目录
+- 存在唯一标识符 inode number (low level name) (类似于 pid)，但是跨文件系统不唯一
+
+软链接 (Symbolic Link)：在文件里存储一个路径，指向另一个文件
+- 软链接也是一个文件，记录了另一个文件的路径名
+- 当引用这个文件时，去找另一个文件
+- 另一个文件的绝对/相对路径以文本形式存储在文件里
+- 可以跨文件系统、可以链接目录、……
+- 几乎没有任何限制
+
+软链接：伪造文件系统\
+Nix
+- 将所有软件包的所有版本集中存储在 /nix/store 下，然后用符号链接构建一个虚拟的环境
+- 可以随时随地构建 “任意” 环境
+- 一个 persistent data structure，random read + append-only write = 任意数据结构
+- 随时回滚 `nix-shell -p $(nix-env --list-generations | grep "3 days ago")`
+- 随地构建 `nix-env --switch-generation` 后直接测试
+#### 文件元数据
+`ls -l`: 显示文件的元数据
+- type: d (directory), l (link), p (pipe), c (character device), b (block device), s (socket)
+- mode: rwx (user, group, other)
+- links: 引用计数
+
+Extended Attributes (xattr)
+```c
+ssize_t fgetxattr(int fd, const char *name, void value[.size], size_t size);
+int fsetxattr(int fd, const char *name, const void value[.size], size_t size, int flags);
+```
+- 每个文件可以维护一个任意的 key-value dictionary
+- 但是不是所有文件系统都支持 xattr，ext4 支持，FAT32 不支持，移动后可能丢失
+
+“好用不火” 的操作系统特性
+- 文件系统的向量索引：vectorfs
+- 致命的缺陷：这是后加的特性
+    - 不是所有的文件系统都支持
+    - 兼容性奇差 (cp 需要 –preserve=xattr 才能保留 xattrs)
+
+Access Control List (访问控制列表)
+- 比 user, group, other 更精细的访问控制
+- 格式：[d:]:name:perms
+- 用法
+    - setfacl -m u:jyy:— file
+    - getfacl file
+#### 监控
+文件系统改变可以被监控
+
+CRUD 实现
+```bash
+diff <(stat -c '%n %y' **) <(sleep 2; date > a.txt; stat -c '%n %y' **)
+```
+
+find -newer
+
+inotify
+```c
+int inotify_init(void);  // 返回 fd
+int inotify_add_watch(int fd, const char *pathname, uint32_t mask);
+```
+
+Python watchdog
+```python
+observer = Observer()  # PollingObserver()
+observer.schedule(event_handler, ".", recursive=True)
+observer.start()
+```
+
+应用
+- 文件管理器自动刷新
+- 编译器自动重载
+- Web server 自动 reload
+
+strace, ltrace, inotify, ... 本质上是从操作系统内核执行提取信息，我们可以有一个 programmable 的文件系统监控工具
+
+eBPF (extended Berkeley Packet Filter)
+- 轻量级 in-kernel 只读 virtual machine
+- RISC like, r0-r10 11 个寄存器，在 probe 入口执行，r1 指向 context 结构体
+- `BPF_CALL <helper>`: `bpf_get_current_pid_tgid()`,  `bpf_map_lookup_elem()`, …, side-effect 严格可控
+- 严格的验证器，只允许 bounded execution
+#### 快照
+git：持久化数据结构
+- git reflog 包含所有的历史 trees, commits, etc.
+- 除了 git reset --hard 清除的工作区，只要不 git gc 都可以恢复
+- Git 的三大类对象 (压缩存储在 .git/objects/)
+    - blob: [length] [content]
+    - tree: [mode] [filename][hash]...
+    - commit: tree [hash] parent [hash]...
+- 分支和提交
+    - refs/heads/[branch] 是指向 commit object 的指针
+    - git checkout -b new → 新建一个 new 的文件 (指针)
+    - git commit → 创建 tree/commit object → 更新 refs/heads/[branch]
+- HEAD “指针的指针”
+    - .git/HEAD 文本文件 `ref: refs/heads/main`
+- stash: refs/stash 下的 detached commit
+- rebase
+    ```bash
+    git reset --hard D
+    git cherry-pick A  # git diff CA A | git apply
+    git cherry-pick B  # git diff A B | git apply
+    ```
+
+单线程 -> 多线程
+- worktree
+    ```bash
+    git worktree add ../experiment  # 在另一个目录切换到 experiment 分支
+    cat ../experiment/.git  # 又是一个 “指针”
+    ```
+
+btrfs: persistent data structure in filesystem
+
+#### 覆盖
+目录的“拼凑”
+- 把 upper/ 和 lower/ 拼起来，形成一个 “假” (虚拟化的) 目录，所有的写入都会写到 upper/，重名的，优先看到 upper/ 的版本
+- 光盘打包：多个 cdrw drives，同一个 lower，但 verify-key.exe 是不同的
+- sudo apt dist-upgrade 系统 “试运行” (overlayroot)，直接 rsync 就可以 commit 了
+
+OverlayFS (“UnionFS”, 联合挂载)
+```bash
+mount -t overlay overlay \
+    -o lowerdir=L1:L2:...,upperdir=U,workdir=W \
+    path_to_merged
+```
+- workdir 是文件系统内部使用的临时空间 (用于实现原子性)
+- 只允许一个 upper，但可以有多个 lower
+- 在 merged 里删除 lower 的文件，会在 upper 里创建一个 “whiteout” 文件
+- 网吧管理，系统一键还原
+
+docker: 多层 overlay
+```dockerfile
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+...
+RUN apt-get update
+RUN apt-get install -y ... && apt-get upgrade -y
+```
+- 每一条 RUN 都会创建一个新的 overlay 层，upper 会 “增加” 到下一次 RUN 的 lower stack 顶部
+- 如果要修改某一层的内容，必须重新 build 该层及其上面的所有层，最好是增加一个 RUN
+#### FUSE
+文件系统 = 数据结构\
+那么理所当然，我们可以在用户态实现一个自己的 filesystem\
+Filesystem in User Space (FUSE): 内核把 lookup, read, write, … 转发到 FUSE driver\
+实现 `struct fuse_operations`
+- 甚至有 `int (*setxattr)(const char *, const char *, const char *, size_t, int)`
+- 从此文件系统不再是 CRUD，你可以不受任何约束地实现 “任意数据结构”
+- 例子：/proc 里的真正 “隐藏” 目录
+
+FUSE hacks
+- sshfs: 远程目录变成本地目录
+- aitfs: 远程 git 仓库变成本地目录
+- dbfs: 由数据库作为存储的 “安全” 文件系统
+    - 借助 FUSE 可以直接在不一致的文件系统上实现强一致性
+- ffs: 把任何 “数据库” (json, …) 变成文件系统
+- 实现“学习资料”的真正隐藏：getdents64 无法看到，但可以 cd 进入
+- 示例：ggfs: Galgame 文件系统
+
+“Everything is a file 的终极实现”
+
+### 文件系统实现
+需要在块设备上实现数据结构
+- bread (load), bwrite (store), bsync (`__sync_synchronize`)
+#### 块设备数据结构
+- 实际的设备
+    - GPT (GUID Partition Table), 是 UEFI 标准的一部分,y也是一个数据结构，可以分出多个 partition
+- 虚拟的设备
+    - LVM (Logical Volume Manager), 是一个数据结构，可以把多个 partition 拼成一个逻辑卷
+        - Physical Volume → Volume Group → Logical Volume (可以一对多、多对一、多对多)
+        - vgdisplay, lvextend, resize2fs
+    - RAID (Redundant Array of Independent Disks), 是一个数据结构，可以把多个 partition 拼成一个逻辑卷，并且提供冗余
+    - NVMe namespace: “硬件级”的 “LVM”
+
+读、写放大
+- bread, bwrite 必须按块读写
+- 更新一个字节 (例如 modification time) 会发生 bread() x 1, bwrite() x 1，会涉及 SSD FTL 的 map table 数据结构更新，因此会发生 read/write 放大
+- 解决方法：缓存
+    - 在更快的存储器 (内存) 中留一份数据 (Linux Buffer Cache, Page Cache)
+    - bread/bwrite 总是访问 cache，如果 cache miss，就要去存储设备里取，异步 write back
+    - Locality 原理
+#### 文件系统设计
+需求
+- persist 的内容
+    - 文件数据 (bytes)
+    - 文件 metadata (name, size, permissions, timestamps, …)
+    - 目录结构 (name → 文件的映射)
+- 统计规律
+    - Most files are small (~2K); a few big files use most space
+    - Directories are typically small (≤20 entries)
+    - File systems are roughly half full
+
+Super Block
+- 数据结构的 “根结构体”
+    - 任何数据结构都需要一个入口：链表 head, 数结构 root, ELF, BMP header, …
+    - 文件系统把 “入口” 放在 Superblock (固定位置)
+- 描述文件系统布局的 “元信息”
+    - Magic number, block size, Total/free blocks, total/free inodes
+    - 数据结构的起始位置、大小、…
+        - mkfs 创建; mount 命令会根据 super block 确定文件系统类型
+- 最关键的一个 block，通常备份多份
+
+FATFS (FAT File System)\
+1. 核心数据结构：File Allocation Table (FAT)
+- 把磁盘分成 clusters (sector 的 2^k 倍), `BPB_SecPerClus`
+- `cluster_t fat[4096];` (FAT-12)，代表每个 cluster 的 next
+    - 0 = free, -1 = EOF
+    - 在 FAT 碎片的情况下，大文件 lseek 会产生显著的读放大
+2. 目录
+- `struct dent entries[0];` “目录文件”，记录目录中的文件信息
+    - DOS 早期设计扩展名 3 个字符，例如文件名 “AUTOEXEC.BAT”，只存储 `AUTOEXEC` 和 `BAT`
+    - 不支持硬链接、长文件名需要打补丁
+
+UnixFS (Unix File System)\
+图结构 G(V, E) 顶点和边分开存储
+- inode (Index Node): Mode, Links, User/Group, Size, …
+    - fstat 直接返回 inode 里的信息即可
+- 通过 bitmap 分配 (相比 FAT 有更好的 locality)
+
+索引：联合数据结构 (Fast/Slow Path) ext2
+- 12 个直接指针 + 1 indirect + 1 double indirect + 1 triple indirect
+- 代价：inode 本身体积变大
+
+目录
+- `using dent = map<string, inode_t>;` 天然支持硬链接
+- ext4: <= 60B 的符号链接直接存储在 inode 中
+
+Fast Filesystem (FFS)
+- 从磁盘开头查找 inode 到 data 需要多次寻道，性能很差
+- cylinder groups
+    - 将大磁盘分成多个“小磁盘”
+    - 每个 group 都有 super block 备份，inode bitmap, data bitmap, inode table, data blocks
+    - 每个文件的 inode 和 data 都尽量放在同一个 cylinder group 里
+    - 目录里的文件尽量放在同一个 cylinder group 里
+- locality 原理
+- 大文件将会跨越多个 cylinder group，导致性能下降，但是通过增大块大小进行摊销
+- 小文件引入 sub-block，减少内部碎片
+#### 文件系统的崩溃一致性
+Crash Consistency
+> Move the file system from one consistent state (e.g., before the file got appended to) to another atomically (e.g., after the inode, bitmap, and new data block) have been written to disk.
+
+数据结构更新涉及 multiple-location writes
+```c
+write(fd, buf, 4096); // append
+```
+- 分配数据块: bwrite(d-bitmap)
+- 写入数据块: bwrite(data)
+- 更新元数据 (size, time, index, …): bwrite(iblock)
+
+层次化存储结构\
+Block cache → queue (DMA) → 存储系统上的计算机 → queue
+- 计算机系统会按照他认为的 “最佳” 顺序写入 (乱序执行)
+    - HDD 的磁头运动规划；SSD FTL
+-  bread, bwrite 就类似是 relaxed memory model
+
+乱序执行时，磁盘掉电时，写入请求的顺序是没有任何保证\
+早期 SSD 还有更严重的问题，FTL crash 后会留下 corrupted data structure\
+崩溃会导致数据丢失、目录损坏，甚至文件系统无法挂载\
+可以用 fsck 尝试把文件系统恢复到一致状态\
+快速格式化只是把 super block, inode bitmap 等清空，文件系统的元数据仍然存在，可以恢复
+
+File System Checking (fsck)
+- 根据磁盘上已有的 G(V, E)，恢复出 “最可能” 的数据结构
+- 性能很差
+- 同样的也有 git fsck
+
+实现崩溃一致性：重新理解 “数据结构”
+- Append-only 记录所有历史操作
+    - 一旦有历史操作，就可以随时重构实际的数据结构, Write-ahead log (“Redo log”)
+- Store buffer: Store 写入 CPU 本地缓存，慢慢传递给其他处理器
+
+LSM (Log-structured Merge Trees)
+- 只有 MemTable 可写 (例如 Skip List)，带 WAL (crash consistency)
+- MemTable 写满，触发 Flush 向磁盘持久化
+- 磁盘上全是 Immutable SSTable
+    - 如果结构不够好就 Merge (创建新 SSTable), Amortized O(1)
+    - 类比 Memory Hierarchy，小的树会 override 大的树
+> TIP: Whenever your system has a fundamental flaw, see if you can turn it around into a feature or something useful.\
+> LFS 需要定期后台回收垃圾块，十分耗时，不如我们将其做成一个保留旧版本的 feature，这就是**快照** (NetApp WAFL)
+
+文件系统中的 Write-ahead Log
+1. 写入 TXBegin; operations，写完后 flush 等待数据落盘
+2. 写入 TxEnd
+3. 写入文件系统 (Checkpointing)
+    - replay(operations) 写入文件系统、回收日志空间
+    - 如果写入日志时崩溃，没有 TxEnd，直接丢弃日志
+    - 如果写入文件系统时崩溃，replay 日志，保证文件系统的一致性 (写一半也没事，因为写入操作是幂等的)
+
+Journaling Tricks
+- 批处理 (xv6; jbd)
+    - 多次系统调用的 Tx 合并成一个，减少 log 的大小
+    - jbd: 定期 write back
+- Checksum (ext4)
+    - 不再标记 TxBegin/TxEnd
+    - 直接标记 Tx 的长度和 checksum (顺便还检查了日志完整性)
+- Metadata journaling (ext4 default)
+    - 数据占磁盘写入的绝大部分，所以只对 inode 和 bitmap 做 journaling 可以提高性能
+    - 保证文件系统的目录结构是一致的；但数据可能丢失
+#### 应用程序的崩溃一致性
+应用程序的多个写入操作也会被乱序
+
+metadata journaling crash unsafe 例子：
+```c
+Path("a.txt.tmp").write_text(...)
+unlink("a.txt")
+// crash happens here
+rename("a.txt.tmp", "a.txt")
+```
+当 crash 发生在这里，由于 metadata journaling 不对 write() 做 journaling，replay 只会看到 a.txt.tmp 被创建，a.txt 被删除，最终文件丢失
+
+因此，有必要在用户空间实现崩溃一致性\
+sync() 系列系统调用
+- 全局同步
+    - 同步所有文件系统中的所有数据
+    - 性能很差，只在关机/命令行使用
+- 文件描述符同步
+    - `syncfs(fd)`: 同步 fd 对应的文件系统
+    - `fsync(fd)`: 同步文件 data + 全部 metadata
+    - `fdatasync(fd)`: 同步文件 data
+        - 仅同步改变了的数据相关 metadata (size、索引)，比如当文件最后访问时间被修改时，fdatasync 不会同步 inode
+        - 例子：数据库，实现应用程序中的 WAL (实现 bflush 的效果)
+
+### 数据库
+#### 应用数据持久化
+软件是物理世界过程在信息世界中的投影\
+应用程序天生就有 persistence 的需求\
+本质：数据结构的 CRUD 操作
+
+.pptx 文件本身是一个 zip 归档文件，XML 描述的数据结构 (ISO/IEC 29500)
+- agent 的 ppt 处理 skill 就是些特殊的 prompts，告诉 ai 如何处理
+
+那我们如何持久化数据？
+1. Everything is a file
+- 使用目录树和文件来存储数据结构
+- 可以使用所有 UNIX 工具，甚至可以用 symlink 实现引用
+- agent friendly
+- 但是 crash consistency 实现复杂，性能稍差，有读/写放大问题
+- 小规模系统的选择
+2. 数据结构
+- 直接在文件 (虚拟磁盘) 上构建数据结构，所有 CRUD 都是函数调用
+    ```c
+    struct superblock {
+        struct student *s;
+        struct course *c;
+    }
+    struct student { char stuid[16]; ...  };
+    struct course  { char cid[16]; ...  }
+    ```
+- 可以把数据结构文件 mmap 到内存，直接 persist 指针
+    - mmap region 不会自动 write-back
+    - msync (2),而且 msync 也不保证 crash consistency
+    - fdatasync
+- 可以实现 WAL Log
+    ```c
+    struct superblock {
+        u32 magic;
+        char wal[256];
+        ...
+    };
+    ```
+    - 对于任何数据结构操作，先把所有的 side effects 写入 wal，然后再执行操作，最后清除 WAL
+    - 如果把程序状态也 persist， 那么就可以实现 checkpointing
+    - 'single-level store' (SLS) 操作系统
+#### 关系型数据库
+好的持久化方式就是一个好的数据结构
+- 好用：处理任意类型的数据结构，方便使用
+- 性能：可以 scale
+- crash consistency：崩溃后数据不能丢失，支持 multi-write atomicity (all-or-nothing)
+
+我们常用的数据结构都是 pointer-based\
+Pointer 是对象之间关系表示的一种方式
+```c
+struct node {
+    char value[32];  // Record
+    struct node *left, *right;  // Pointers
+}
+```
+
+但是 pointer 并不是一个足够好的方式
+
+Relational Database (RDB): Everything is a table
+- 一个 surprisingly simple 的模型
+- 每行一个对象；对象可以用 id 索引其他对象
+- struct = table 的一行
+- 查询：指针“配对”
+    ```sql
+    SELECT Courses.Title
+    FROM Student
+    JOIN Takes_Course
+        ON Student.ID = Takes_Course.ID  -- Key
+    JOIN Courses
+        ON Takes_Course.ClassID = Courses.ClassID  -- Key
+    WHERE Student.Name LIKE '张%'
+    ```
+
+数据库系统
+- “ACID” 数据库开启软件的新时代，A (Atomicity), C (Consistency), I (Isolation), D (Durability)
+    - Serializability: 并发执行的效果等价于某种串行执行
+    - Strong crash consistency: 系统 crash 也不会损坏或丢失
+- 支持任意长 (允许混合任意计算) 的 Transaction
+    ```c
+    tx_begin();
+    if (user1.balance < m) tx_abort();  // SQL
+    user1.balance -= m;  // SQL
+    user2.balance += m;  // SQL
+    tx_commit();
+    ```
+
+ACID 数据库
+- 并发执行的效果 = 一把大锁保平安
+- 但性能远优于粗粒度加锁
+- 完全自动的崩溃恢复
+
+关系数据库：海量的实现优化
+- 查询优化 (rewriting)
+- 索引 (B+ Tree 等数据结构)
+- 缓存、分库分表、并发控制、读写分离……
+
+数据库系统：实现
+- 实现查询 = 实现编译优化 (语义等价的 rewriting)
+
+一个超级复杂的并发程序
+- 每个 SQL 都操作数据库的一部分
+    - Write(x)
+    - Read(y)
+- 但并发控制更困难
+    - T_1: tx_begin(); x = 1; may_crash(); y = 2; tx_commit()
+    - T_2: tx_begin(); y = 1; sleep(100000); x = 2; tx_commit()
+        - 2 Phase Locking: 由于 Tx 可以执行任意代码，所以只能 “边执行边上锁” + deadlock detection，遇到死锁就 rollback，commit 时释放
+        - MVCC: 每次都开一个新的 git branch (copy-on-write)，commit 的时候向 main merge，检测到冲突就 rollback
+
+例子：SQLite
+> SQLite is a C-language library that implements a small, fast, self-contained, high-reliability, full-featured, SQL database engine. SQLite is the most used database engine in the world…
+- 一个基于文件实现的支持 SQL 的 “数据结构”
+- Android, iOS, macOS, Chrome, … 中广泛内嵌了 SQLite
+- Zero Configuration
+#### 从 SQL 到 NoSQL, NewSQL
+传统关系型数据库的局限性
+- 数据库引擎压力大，分库、分表、读写分离、索引、缓存、优化……
+- 永远无法预知程序员会写出怎样性能糟糕的 query
+- 提供了功能 = 被滥用 → Performance Bug
+- 任何 “Systems” 都无法避免的 tech debt
+
+解决方法：只支持一个 “够用” 但可以 scale out 的 subset
+- Key-value store
+    - 应用程序全靠 key 管理数据
+    - user:{uid}
+    - user:{uid}:like_history (a list)
+    - List 支持 append/pop/range 等操作
+    - 应用场景：社交平台的点赞/浏览/历史记录
+- 关键的性能优化
+    - 给 key 做 hash，load balance 到多台机器上
+    - Everything is append-only
+        - LSM-Tree; 只支持 append 的 list; …
+    - 分布式高性能、高可靠
+
+Redis: Everything is In-memory
+- 核心：key-value store (GET, SET)
+    - 支持存储数据结构：String, List, Set, Hash, Sorted Set, …, Stream
+    - 支持查询
+    - 甚至支持 MULTI/WATCH/EXEC 事务
+- 应用：高性能缓存
+    - 点赞插入 user:{uid}:like_history; 更新 user:{uid}:like_count
+    - 定期合成一条 persistent 数据库的插入
+
+NoSQL
+- MongoDB (Document)
+    - Key → BSON (Binary JSON，比 JSON 支持更多类型)
+    - 例子：创建一个新 document (message)，然后 append
+- Cassandra (Column)
+    - CQL: 依然是 Table 的模型
+    - 限制程序员的滥用
+
+NewSQL: Google Spanner; TiDB; CockroachDB
+
+Vector Database：AI 应用的新基础设施
+- Embedding model: 将 context 映射为高维向量 (距离越近，语义越近)
+- Vector database: 存储和检索向量的数据库
+    - ANN: Approximate Nearest Neighbor 返回 “最近” 的文档
+
+## Security
+### 计算机安全
+#### 简介
+过去的“裸奔”时代
+- 8086, Real-Mode
+    - Firmware code 直接映射到地址空间中
+    - int $x → (*(void (*)() *)(4 * x))()，16-bit 时代的 “系统调用”
+    - 任何程序都可以访问任何硬件，病毒可以复制自己，然后感染更多的计算机 (“加壳”)
+    - 例子：CIH 能破坏硬件的病毒
+- BBS
+    - 没有 SSL/TLS，所有的通信都是明文
+    - 任何人都可以监听、篡改、伪造通信
+
+信息安全三要素
+- 保密性 (Confidentiality)：不想给别人看的，别人就看不到
+    - 快速格式化可以恢复
+- 完整性 (Integrity)：不想让别人改的，别人就改不了
+    - XSS, 中间人攻击 (MITM)
+- 可用性 (Availability)：我的服务，别人不能让我用不了
+    - DDoS, Algorithmic Complexity Attack (ACA)
+#### 密码学速通
+- One-way functions
+    - 有一个正向好算、逆向难算的 f(x) = y
+    - 例子：密码学哈希 (SHA-256, …)，表现得近乎 “完全随机”
+- Trapdoor one-way functions
+    - 多了个 “后门” t (私钥)，有了 t 之后，f(x) = y 逆向变得好算
+    - 正过来用 (confidentiality): Alice 公开 f (公钥) → Bob 公开传输 f(m) → Alice 解密得到 m
+    - 反过来用 (integrity): Alice 公开 f → Bob 发送一个随机的 c → Alice 用 t 求解 f(r) = c，公开 r → 任何人都可以验证 f(r) = c (证明 Alice 有 t) (数字签名)
+- 应用：区块链
+    - 一个全球共享的 (低效) append-only log
+    - Killer Application: 加密货币，~~洗钱~~
+
+Diffie‑Hellman Key Exchange
+- Alice 和 Bob 公开一个大素数 p 和一个生成元 g
+- Alice 选择一个随机数 a，计算 $A = g^a$ mod p，发送给 Bob\
+  Bob 选择一个随机数 b，计算 $B = g^b$ mod p，发送给 Alice
+- Alice 计算 $K = B^a$ mod p，Bob 计算 $K = A^b$ mod p
+- 由于 $(g^a)^b$ mod p = $(g^b)^a$ mod p，Alice 和 Bob 得到相同的 K
+
+如何证明身份和信任？\
+证书：信任链
+- 公钥的传递可以被篡改，必须有一个可信的第三方来签发证书
+- 由权威机构签发，用于证明某个实体的身份和其公钥的合法性
+- 例子：CA (Certificate Authority) 颁发的 SSL/TLS 证书
+#### 访问控制
+进程 + 虚拟内存已经实现了隔离
+- 进程只能以 ELF 规定的权限访问自己的虚拟地址空间
+- 一切对操作系统世界里的 “共享” 对象访问，都通过系统调用
+
+访问控制：限制程序对操作系统对象的访问
+- 拒绝越权访问 → Confidentiality
+- 拒绝越权修改 → Integrity
+- 公平的系统调用实现 → Availability
+
+访问控制原理就是一张表，越权访问，直接返回 EACCESS (Permission denied)\
+问题在于如何存储和维护这张表
+
+UNIX: 用整数表示身份
+- uid = 0 → root, 其他都是 “普通用户”
+    - root 可以访问所有对象，也可以 setuid 变成其他用户
+    - 子进程继承父进程的 uid
+- gid “完全自由” (一般 0 是 root)
+    - 一个用户可以属于多个组
+- mode: r, w, x 的权限
+    - 例子：owner 只写不可读，audit 组可以读的日志文件
+
+操作系统完全看不到用户名
+- 通过 setuid, setgid, chmod 系统调用实现访问控制
+- Android: 每个 app 都是一个独立的用户，通过 SELinux 进行访问控制
+
+/etc/passwd: 每行一个用户
+- username:password:uid:gid:comment:home:shell
+    - 现代系统通常使用 /etc/shadow 文件存储密码 (+salt) 的 hash 
+    - chsh, passwd 只是修改了此文件
+
+UID family: 💩⛰️
+- Real uid (ruid)
+    - 真实用户身份
+- Saved uid (suid)
+    - 为了实现 “恢复权限” 而设计
+    - 程序可以主动降级 euid，保存到 suid，之后可以恢复 euid
+- Effective uid (euid)
+    - 这是实际访问控制使用的 uid
+    - /bin/passwd 的 euid = 0，实际上是 root 执行的
+- Filesystem uid (fsuid)
+    - 用于独立控制文件系统访问权限 (Since Linux 1.2)
+    - 内核内部仍使用，但应用程序极少独立设置
+- setuid 机制：chmod +s (ls -l /bin/passwd 看见红色标识)
+- `drwxrwxrwt root root /tmp`: sticky bit，只有文件 owner 才能删除自己的文件
+- SGID: 临时变成文件所属 group，之后恢复原来的 group (/tmp 黄色标识)
+
+我们希望的是维护任意的 access control matrix，即(进程、对象、访问) → bool，而 uid, gid, mode 并不是实现访问控制的唯一方法\
+从这个 matrix 里 “切割” 出一部分进行控制
+- Access Control List; acl (5)
+    - 以文件为单位，支持为用户和组分别设置权限
+    - 基于 xattr 实现
+- SELinux/AppArmor; apparmor (7)
+    - 更细粒度的对象级访问控制
+    - SELinux: Mandatory Access Control (MAC)，甚至连 root 都不能越权访问
+- Capabilities
+    - root 行为类的切片
+    - `capsh --drop=cap_net_raw -- -c 'ping 127.0.0.1'`，剥夺了 CAP_NET_RAW，将会 ping 失败
+    - `getcap` 查看 capabilities
+- 像 eBPF 一样，直接写一个 access control function
+    - seccomp (2): 限制系统调用的访问控制
+    - LSM BPF; Linux Kernel 5.7+
+
+观察：大型团体组织中，每个不同角色的成员所需要的权限不同
+- RBAC (Role-Based Access Control): 角色 → 权限
+#### 软件系统安全
+程序中隐藏着万千 “无人理解” 的路径，永远无法预期用户会如何使用程序，更不要说恶意的使用\
+所以我们需要遍历意外的输入
+
+Fuzz Testing: 自动生成大量 “非预期” 输入，观察程序是否你如异常状态
+- AFL (American Fuzzy Lop)
+- OSS-Fuzz
+
+hack 一个进程\
+缓冲区溢出
+- 覆盖返回地址，执行任意代码
+- Return-oriented programming
+
+防御
+- 减少攻击面
+    - 访问控制 (禁止对越权对象的访问)
+    - 执行保护 (使漏洞难以利用)
+        - 随机地址空间 (ASLR)、内存保护 Canary (stack protector), NX-bit (no execute), 控制流完整性 CFI/Intel CET (endbr64 = Indirect Branch Tracking), …
+    - 审计与阻断
+        - auditd: Linux 原生的审计系统
+        - Tetragon: 基于 eBPF 的审计系统，程序只能按照 “预期” 的方式访问对象
+
+所有看起来都 “合法” 的访问，也可能存在非法行为
+- Tenex 系统认证漏洞: 通过虚拟内存分页机制的时间差泄露密码
+```c
+// Authentication system call
+int check_password(__user char *given_pass) {
+    ...
+    for (i = 0; i <= strlen(correct_pass); i++)
+        if (correct_pass[i] != given_pass[i]) {
+            sleep(3);
+            return EACCESS; // access denied
+        }
+    return 0;
+}
+```
+
+Timing side channel attack
+```c
+raise_exception();  // even an HTM abort
+uint8_t volatile x = probe_array[data * 4096];
+```
+- Meltdown
+    - 缓解：Page Table Isolation (PTI)
+    - 把内核的绝大部分内存从用户态的页表里直接删掉
+- Downfall
+- Inception
+- GhostRace
+- 乱序、投机执行
+
+更逆天一点的攻击
+- 超视距窃听: Electromagnetic eavesdropping risks of flat-panel displays; 天线和显示器相距 10m，间隔三层石膏板
+- Physical key extraction attacks on PCs
+- 把内存条冷冻以后拆下来 Cold boot attack
+
+Agent 时代的安全\
+Prompt Injection (jailbreak)
+- LLM 已经被微调成安全
+- 但总有一些 “ignore all previous instructions” 的方法
+- 无法绝对防御，只能通过沙箱/访问控制解决
+
+供应链攻击：甚至不能信任你的软件 (社会工程学)
+- 直接推送攻击的版本：npm package
+- 卧薪尝胆: xz-utils 后门
+
+### 虚拟化和容器
+#### 全系统虚拟化
+NEMU: full system emulator
+- 性能极差
+
+QEMU dyngen (早期版本)
+- 借用一个有优化能力的编译器，为每条指令生成优化后的本机代码
+- 运行时把连续的非跳转指令用 memcpy 组装起来 + relocate
+- 例子
+```c
+// addi r1, r1, -16
+// 手写的汇编 (T0 通常是寄存器) 组装而成
+// op_movl_T0_r1
+// op_addl_T0_im
+// op_movl_r1_T0
+void op_addl_T0_im(void) {
+    T0 = T0 + ((long)(&__op_param1));
+}
+```
+
+Just-in-time: 把连续的指令代码交给编译器优化
+
+以前的 ISP (Internet Service Provider) 提供的是物理机，绝大多部分的 CPU 空闲率很高\
+商机：当然可以使用虚拟化虚拟出多个虚拟机，提供给不同的用户使用，而且保证可以获得同等的性能
+
+Y Combinator 的名字来源于 lambda 演算的 Y combinator，Y(f) = f(Y(f))，可以实现递归
+```python
+def Y(f):
+    def wrapper(*args):
+        return f(wrapper)(*args)
+    return wrapper
+
+factorial = Y(lambda f: lambda n: 1 if n < 2 else n * f(n - 1))
+```
+
+Disco: Virtual machine monitors
+- 加入抽象层，欺骗 OS
+- VMWare 的前身
+- 普通指令直接执行
+- 模拟所有 “有系统级副作用” 的指令，例如关中断、I/O
+    - 包括所有对 CR3 和页表的修改
+    - “改写” 一份页表到 CR3 (Shadow Page Table)
+- 降级到 Ring 1，patch 相应特权指令，替换成自己的 call
+
+更多技术方案：Xen and the art of virtualization
+- 半虚拟化 “Paravirtualization”: 修改操作系统，主动配合虚拟化
+- 非特权代码直接执行 (Ring 1)，做分页、中断等操作 trap 到 Ring 0
+
+影响硬件设计
+- Intel: VT-x (2005) → VT-d (2006) → EPT (2008)
+- Virtual I/O Device (VIRTIO)
+
+管理操作系统状态
+- ReVirt
+    - 时间转移：“replay the long-term, instruction-by-instruction execution of a computer system.”
+- 虚拟机迁移
+    - 空间转移：“a system that moves a computer’s state over a slow (384kbps) DSL link in minutes rather than hours.”
+
+#### 操作系统虚拟化
+另一种思路：操作系统自己虚拟化
+
+操作系统：“假装” 在虚拟机里执行系统调用\
+例子：虚拟的 pstree
+- pid = 1: init (systemd)
+
+pid 可以不再是整个操作系统唯一的
+- 给每个进程增加一个 “osid”，增加系统调用 vos(fs_root)
+- 创建一个新的 osid，pid 从 1 开始分配，fork() 继承父进程的 osid
+
+pidfs\
+pid 是会回收利用的
+```bash
+ps | grep SomeProcess
+kill -9 31181
+```
+- 如果相隔时间太长，就可能错杀其他进程
+- pid 机制是无法避免 TOCTTOU 问题的
+
+pidfs: Everything is a file
+- `pidfd_open(pid)` → 获得 fd
+- `pidfd_send_signal(fd, sig)` → 给进程发信号
+- fd 是稳定的引用，不受 PID 回收影响
+- 一旦作为 fd 打开，进程就会增加一个引用计数，进程数据结构就不会回收
+- “leaky abstraction”：TOCTTOU、僵尸进程、托孤……
+
+chroot (1979, Version 7 Unix)
+- 把进程的文件系统视图限制在某个子目录下
+    - `chroot(“/path/to/root”)`
+    - 进程看到的 / 就是 “/path/to/root”
+- 只虚拟化了文件系统一个命名空间
+    - PID、网络、用户……都还是共享的，容易逃逸
+
+虚拟化需要管理的对象
+- pid
+- user: 用户和组
+- mnt: 文件系统和设备
+- ipc: 信号量、消息队列、共享内存
+- net: 网络设备、协议栈、端口 (localhost:5000)
+- time: 系统时间和时区
+- uts: 主机名和域名
+- Linux namespaces: /proc/[pid]/ns/
+    - lsns 可以查看上面列出的所有命名空间
+
+Linux Namespaces
+- clone: 创建进程时可以带 CLONE_NEW_xxx (PID, IPC, …) 选项
+- setns, unshare: 改变某一个对象的 “osid”
+
+cgroups: 实现资源的控制
+- “圈一些进程”，设定资源使用策略
+- cat /proc/*/cgroup; /sys/fs/cgroup
+
+namespaces + cgroups + overlayfs = 容器 (container)
+
+云时代的虚拟机
+- 容器
+    - 和虚拟机一样
+    - 开销比虚拟机低很多，安全性略低
+- Kubernetes (K8s): “容器编排”
+    - 动态、透明管理的 “无状态” 容器 Pod (虚拟机)
+        - 容器出错、网络异常、节点崩溃都可以随时在另一个地方重启
+    - 声明式的访问和路由
+        - 配置好之后，只要访问 Gateway API，自动路由到正确的容器
+        - 自动的负载均衡、健康检查……
+
+“云原生” 的时代
+- 机器不可靠 → 多副本、自动故障转移
+- 人工不可靠 → 声明式，运维全部交给系统
+- 环境不可靠 → 容器化确定性
